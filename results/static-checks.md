@@ -2,7 +2,7 @@
 
 - Task: `tasks/enf-splice-forensics`
 - Checks: `scripts/checks/*` from terminal-bench-3 @ `58a97b0`
-- Run: 2026-10-22T18:28:10Z
+- Run: 2026-10-22T20:26:56Z
 - Result: **28 passed, 0 failed, 0 with warnings** (of 28)
 
 | Check | Result | Details |

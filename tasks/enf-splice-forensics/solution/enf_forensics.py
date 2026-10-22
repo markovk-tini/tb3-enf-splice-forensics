@@ -166,7 +166,9 @@ def _log_transforms(L, nfft):
     return _LOG_FFT[key][1:]
 
 
-def masked_ncc(e, L, min_frac=0.4):
+def masked_ncc(e, L, min_frac=0.4, with_counts=False):
+    """Correlation of trace e with the log at every lag, over the samples both
+    have. Lags where the log covers less than min_frac of the window are -1."""
     W = e.size
     me = np.isfinite(e).astype(float)
     ez = np.where(me > 0, e, 0.0)
@@ -182,7 +184,7 @@ def masked_ncc(e, L, min_frac=0.4):
     with np.errstate(invalid="ignore", divide="ignore"):
         c = (SeL - Se * SL / n) / np.sqrt((See - Se * Se / n) * (SLL - SL * SL / n))
     c[(n < min_frac * me.sum()) | ~np.isfinite(c)] = -1.0
-    return c
+    return (c, n) if with_counts else c
 
 
 def best_two(c, excl=60):
@@ -200,7 +202,7 @@ def find_anchors(e, L, lo, hi, W=180, hop=10, min_gap=None, min_corr=0.6):
     min_gap = ANCHOR_GAP if min_gap is None else min_gap
     found = []
     for s0 in range(lo, max(lo + 1, hi - W + 1), hop):
-        c = masked_ncc(e[s0:s0 + W], L)
+        c = masked_ncc(e[s0:s0 + W], L, min_frac=0.9)
         i1, c1, c2 = best_two(c)
         if c1 >= min_corr and c1 - c2 >= min_gap:
             found.append((i1 - s0, c1 - c2, s0))
@@ -224,7 +226,8 @@ def choose_bands_by_log(hum, L, W=180, hop=45):
     bands that really carry the grid give windows that match one log time far
     better than any other. Among clean subsets the scores are all similar
     (they are limited by how distinctive the grid's own wander is), so the
-    default choice is kept unless some subset is clearly better.
+    default choice is only replaced when it finds no clear match at all and
+    another subset clearly does.
     """
     n = hum.t.size
     W = min(W, n)
@@ -233,21 +236,21 @@ def choose_bands_by_log(hum, L, W=180, hop=45):
         e = hum.trace(bands)
         gaps = []
         for s0 in range(0, max(1, n - W + 1), hop):
-            _, c1, c2 = best_two(masked_ncc(e[s0:s0 + W], L))
+            _, c1, c2 = best_two(masked_ncc(e[s0:s0 + W], L, min_frac=0.9))
             if c1 >= 0.6:
                 gaps.append(c1 - c2)
         return sum(sorted(gaps)[-3:])
 
+    s_default = score(hum.bands)
+    if s_default >= 0.15:
+        return s_default  # the default bands already line up with the grid
     cand = sorted(hum.cand, key=lambda k: -hum.snr[k])[:4]
     scores = {}
     for mask in range(1, 1 << len(cand)):
         bands = tuple(sorted(k for i, k in enumerate(cand) if mask >> i & 1))
         scores[bands] = score(bands)
-    s_default = scores.get(tuple(sorted(hum.bands)), None)
-    if s_default is None:
-        s_default = score(hum.bands)
     top = max(scores.values())
-    if top > 1.5 * s_default + 0.05:
+    if top > 2 * s_default + 0.1:
         good = [b for b, sc in scores.items() if sc >= 0.9 * top]
         hum.set_bands(max(good, key=lambda b: sum(hum.snr[k] / (1 + hum.snr[k]) for k in b)))
     return top
@@ -259,7 +262,7 @@ def local_match(e, L, i0, i1, lag_guess, radius=900):
     b = int(min(L.size, lag_guess + i1 + radius))
     if b - a < (i1 - i0) + 10:
         return None
-    c = masked_ncc(e[i0:i1], L[a:b])
+    c = masked_ncc(e[i0:i1], L[a:b], min_frac=0.9)
     j, c1, c2 = best_two(c, excl=30)
     return a + j - i0, c1, c2
 
@@ -278,10 +281,15 @@ def fine_lag(e, L, i0, i1, lag):
 
 
 def uniqueness(e, L, i0, i1, lag):
-    c = masked_ncc(e[i0:i1], L)
+    """Correlation at the proposed time vs the best elsewhere, where 'elsewhere'
+    only counts log times that cover the stretch at least as well."""
+    c, n = masked_ncc(e[i0:i1], L, with_counts=True)
     at = lag + i0
-    c_at = float(np.max(c[max(0, at - 2): at + 3]))
+    lo, hi = max(0, at - 2), at + 3
+    k = lo + int(np.argmax(c[lo:hi]))
+    c_at = float(c[k])
     cc = c.copy()
+    cc[n < 0.9 * n[k]] = -1
     cc[max(0, at - 60): at + 61] = -1
     return c_at, float(np.max(cc))
 
@@ -417,6 +425,25 @@ LOCAL_GAP = 0.05     # margin for a match near a neighbouring stretch's time
 CUSUM_DROP = 12.0    # how far phase agreement may fall before a model stops growing
 
 
+def phase_change(model, t, span=20.0, gap=3.0):
+    """Lasting change of the residual hum phase across t (radians, band-weighted).
+
+    An edit moves the phase relation for good (every splice here steps the
+    hum phase by a radian or more); interference that briefly swamps a band
+    does not, and the phase comes back once it has passed.
+    """
+    _, Wl, vl = model.blocks(t - gap - span, t - gap)
+    _, Wr, vr = model.blocks(t + gap, t + gap + span)
+    if vl.sum() < 10 or vr.sum() < 10:
+        return np.pi  # cannot tell: treat as a change
+    num = den = 0.0
+    for k in model.bands:
+        d = Wr[k][vr].mean() * np.conj(Wl[k][vl].mean())
+        num += model.weight[k] * abs(np.angle(d))
+        den += model.weight[k]
+    return num / den
+
+
 def grow(model, seed0, seed1, lo, hi, free):
     """Extend [seed0, seed1] while the hum phase keeps following the model."""
     tb, p, v = model.projection(lo, hi)
@@ -429,7 +456,7 @@ def grow(model, seed0, seed1, lo, hi, free):
         cus, best, best_i = 0.0, 0.0, i
         while 0 <= i < tb.size:
             if v[i]:
-                if S[i] > STEP_T:
+                if S[i] > STEP_T and phase_change(model, tb[i]) > 0.6:
                     return tb[i]
                 cus += p[i] - 0.4
                 if cus > best:
@@ -453,24 +480,23 @@ def refine(left, right, a, b, lo, hi):
     left/right are Models or None (unmatched)."""
     span0, span1 = max(lo, a - 20), min(hi, b + 20)
     if (left is None) != (right is None):
-        # Only one side follows the log. A splice is a step in that side's
-        # residual hum phase; on the unmatched side the residual wanders and
-        # can show steps of its own, so take the first step met when leaving
-        # the matched side.
+        # Only one side follows the log. First find where its phase agreement
+        # ends; the splice itself is a step in its residual phase, so snap to
+        # a step within a few seconds of that point if there is one. (Further
+        # into the unmatched audio the residual wanders and shows steps too.)
         m = left or right
-        tb, S = m.step_scan(span0, span1)
-        idx = [j for j in range(S.size) if a <= tb[j] <= b]
-        if left is None:
-            idx.reverse()  # walk from the matched (right) side
-        region = []
-        for j in idx:
-            if S[j] > STEP_T:
-                region.append(j)
-            elif region:
-                break
-        if region:
-            j = max(region, key=lambda i: S[i])
-            return tb[j] - BLOCK / 2
+        tb, p, v = m.projection(span0, span1)
+        sc = np.where(v, p - 0.4, 0.0) * (1 if left is not None else -1)
+        cum = np.concatenate([[0], np.cumsum(sc)])
+        sel = np.flatnonzero((tb >= a) & (tb <= b))
+        if sel.size:
+            bc = tb[sel[int(np.argmax(cum[sel]))]] - BLOCK / 2
+            ts, S = m.step_scan(span0, span1)
+            near = np.flatnonzero((np.abs(ts - BLOCK / 2 - bc) <= 4.0) & (S > STEP_T))
+            if near.size:
+                j = near[int(np.argmax(S[near]))]
+                return ts[j] - BLOCK / 2
+            return bc
     tb = None
     score = 0
     for m, sign in ((left, +1), (right, -1)):
@@ -509,6 +535,8 @@ def seeded_model(hum, log, lag, t0, t1, r=None, r_span=60e-6):
         if S.size == 0 or S.max() <= STEP_T:
             return m, t0, t1
         cut = tb[int(np.argmax(S))]
+        if phase_change(m, cut) <= 0.6:
+            return m, t0, t1
         if cut - t0 >= t1 - cut:
             t1 = cut - 3.0
         else:
@@ -534,6 +562,27 @@ def same_source(m, m0, tol=1.0):
     fa = a * m.theta[b] - b * m.theta[a]
     fb = a * m0.theta[b] - b * m0.theta[a]
     return abs((fa - fb + np.pi) % (2 * np.pi) - np.pi) < tol
+
+
+def continuation(hum, log, m0, t0, t1, reach=900):
+    """Is [t0, t1] more of m0's recording, D seconds earlier or later?
+
+    Scans every whole-second offset D in [-reach, reach] with m0's clock ratio
+    and scores how coherently the hum phase follows the log. The true offset
+    gives a sharp peak (a few seconds wide); any other leaves the phase
+    wandering. Returns (D, coherence) for a clear peak, else None.
+    """
+    best = []
+    for D in range(-reach, reach + 1):
+        m = Model(hum, log, m0.s0 + D, m0.r)
+        m.bands = list(m0.bands)
+        best.append(m.coherence(t0, t1))
+    c = np.array(best)
+    j = int(np.argmax(c))
+    far = np.abs(np.arange(c.size) - j) > 10
+    if not far.any() or c[j] < 0.5 * m0.coh or c[j] < 2.0 * c[far].max():
+        return None
+    return j - reach, float(c[j])
 
 
 def unexplained_runs(explained):
@@ -577,8 +626,11 @@ def analyze(hum, log):
         progress = False
         runs = sorted(unexplained_runs(explained), key=lambda r: r[0] - r[1])
         # 1) a stretch next to a dated part is first tested as more of the same
-        #    recording (or another stretch from the same session): search near
-        #    the times the dated models imply, with the recorder clock fixed
+        #    recording, some seconds or minutes earlier or later (a cut, or
+        #    pieces put back in another order). The frequency trace has to pick
+        #    one time near the neighbour's clearly; the hum phase must then
+        #    follow the log coherently with the neighbour's clock and carry the
+        #    same harmonic fingerprint (same original recording).
         for lo, hi in runs:
             best = None
             for m0 in sorted([s[2] for s in segs], key=lambda m: -m.coh):
