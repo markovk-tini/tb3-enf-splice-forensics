@@ -124,9 +124,16 @@ class Hum:
         for k in cand:
             self.t, d, G[k] = spectrogram(self.z[k], k)
             tracks[k] = peak_track(G[k], d)
-        self.bands = self._choose(cand, tracks)
-        H = sum(self.snr[k] / (1 + self.snr[k]) * G[k] for k in self.bands)
-        self.f = NOM + peak_track(H, d)
+        self.cand, self.G, self.d = cand, G, d
+        self.set_bands(self._choose(cand, tracks))
+
+    def trace(self, bands):
+        H = sum(self.snr[k] / (1 + self.snr[k]) * self.G[k] for k in bands)
+        return NOM + peak_track(H, self.d)
+
+    def set_bands(self, bands):
+        self.bands = list(bands)
+        self.f = self.trace(self.bands)
 
     def _choose(self, cand, tracks):
         """Harmonics that carry the grid frequency move together; a band taken
@@ -137,7 +144,7 @@ class Hum:
             return ks or cand
         best, best_score = None, None
         for k in ks:
-            group = [j for j in ks if j == k or spearmanr(tracks[k], tracks[j]).correlation > 0.35]
+            group = [j for j in ks if j == k or spearmanr(tracks[k], tracks[j]).correlation > GROUP_CORR]
             score = (min(len(group), 2), sum(self.snr[g] for g in group))
             if best_score is None or score > best_score:
                 best, best_score = group, score
@@ -146,14 +153,25 @@ class Hum:
 
 # ----------------------------------------------------------------- trace matching
 
+_LOG_FFT = {}
+
+
+def _log_transforms(L, nfft):
+    key = (id(L), L.size, nfft)
+    if key not in _LOG_FFT:
+        M = np.isfinite(L).astype(float)
+        Lz = np.where(M > 0, L, 0.0)
+        _LOG_FFT.clear() if len(_LOG_FFT) > 8 else None
+        _LOG_FFT[key] = (L, np.fft.rfft(M, nfft), np.fft.rfft(Lz, nfft), np.fft.rfft(Lz * Lz, nfft))
+    return _LOG_FFT[key][1:]
+
+
 def masked_ncc(e, L, min_frac=0.4):
     W = e.size
-    M = np.isfinite(L).astype(float)
-    Lz = np.where(M > 0, L, 0.0)
     me = np.isfinite(e).astype(float)
     ez = np.where(me > 0, e, 0.0)
     nfft = 1 << int(np.ceil(np.log2(L.size + W)))
-    FM, FL, FL2 = np.fft.rfft(M, nfft), np.fft.rfft(Lz, nfft), np.fft.rfft(Lz * Lz, nfft)
+    FM, FL, FL2 = _log_transforms(L, nfft)
 
     def xc(FA, b):
         return np.fft.irfft(FA * np.conj(np.fft.rfft(b, nfft)), nfft)[: L.size - W + 1]
@@ -175,10 +193,11 @@ def best_two(c, excl=60):
     return i1, float(c[i1]), float(cc[i2])
 
 
-def find_anchors(e, L, lo, hi, W=180, hop=10, min_gap=0.05, min_corr=0.6):
+def find_anchors(e, L, lo, hi, W=180, hop=10, min_gap=None, min_corr=0.6):
     """Trace windows inside frames [lo, hi) that match one log time clearly
     better than any other. Returns clusters of the implied lag of frame 0."""
     W = min(W, hi - lo)
+    min_gap = ANCHOR_GAP if min_gap is None else min_gap
     found = []
     for s0 in range(lo, max(lo + 1, hi - W + 1), hop):
         c = masked_ncc(e[s0:s0 + W], L)
@@ -195,6 +214,43 @@ def find_anchors(e, L, lo, hi, W=180, hop=10, min_gap=0.05, min_corr=0.6):
         else:
             clusters.append({"lag": lag, "score": gap, "windows": [s0], "W": W})
     return sorted(clusters, key=lambda c: -c["score"])
+
+
+def choose_bands_by_log(hum, L, W=180, hop=45):
+    """Check the harmonic choice against the grid log and repair it if broken.
+
+    The grid is the arbiter: a band taken over by some other tone spoils the
+    trace so badly that no window lines up with the log any more, while the
+    bands that really carry the grid give windows that match one log time far
+    better than any other. Among clean subsets the scores are all similar
+    (they are limited by how distinctive the grid's own wander is), so the
+    default choice is kept unless some subset is clearly better.
+    """
+    n = hum.t.size
+    W = min(W, n)
+
+    def score(bands):
+        e = hum.trace(bands)
+        gaps = []
+        for s0 in range(0, max(1, n - W + 1), hop):
+            _, c1, c2 = best_two(masked_ncc(e[s0:s0 + W], L))
+            if c1 >= 0.6:
+                gaps.append(c1 - c2)
+        return sum(sorted(gaps)[-3:])
+
+    cand = sorted(hum.cand, key=lambda k: -hum.snr[k])[:4]
+    scores = {}
+    for mask in range(1, 1 << len(cand)):
+        bands = tuple(sorted(k for i, k in enumerate(cand) if mask >> i & 1))
+        scores[bands] = score(bands)
+    s_default = scores.get(tuple(sorted(hum.bands)), None)
+    if s_default is None:
+        s_default = score(hum.bands)
+    top = max(scores.values())
+    if top > 1.5 * s_default + 0.05:
+        good = [b for b, sc in scores.items() if sc >= 0.9 * top]
+        hum.set_bands(max(good, key=lambda b: sum(hum.snr[k] / (1 + hum.snr[k]) for k in b)))
+    return top
 
 
 def local_match(e, L, i0, i1, lag_guess, radius=900):
@@ -353,8 +409,12 @@ def free_step_scan(hum, bands, W=3.0, step=BLOCK):
 
 # --------------------------------------------------------------- segmentation
 
-STEP_T = 25.0      # log-referenced phase step that marks an edit
-FREE_STEP_T = 30.0  # reference-free phase step that marks an edit (log gaps)
+STEP_T = 25.0       # log-referenced phase step that marks an edit
+FREE_STEP_T = 30.0   # reference-free phase step that marks an edit (log gaps)
+GROUP_CORR = 0.35    # rank correlation for two harmonics to count as moving together
+ANCHOR_GAP = 0.05    # margin over the second-best log time for a global match
+LOCAL_GAP = 0.05     # margin for a match near a neighbouring stretch's time
+CUSUM_DROP = 12.0    # how far phase agreement may fall before a model stops growing
 
 
 def grow(model, seed0, seed1, lo, hi, free):
@@ -374,7 +434,7 @@ def grow(model, seed0, seed1, lo, hi, free):
                 cus += p[i] - 0.4
                 if cus > best:
                     best, best_i = cus, i
-                elif best - cus > 12.0:
+                elif best - cus > CUSUM_DROP:
                     break
             else:
                 if fSb[i] > FREE_STEP_T:
@@ -392,6 +452,25 @@ def refine(left, right, a, b, lo, hi):
     """Boundary between two neighbouring stretches, searched in [a, b].
     left/right are Models or None (unmatched)."""
     span0, span1 = max(lo, a - 20), min(hi, b + 20)
+    if (left is None) != (right is None):
+        # Only one side follows the log. A splice is a step in that side's
+        # residual hum phase; on the unmatched side the residual wanders and
+        # can show steps of its own, so take the first step met when leaving
+        # the matched side.
+        m = left or right
+        tb, S = m.step_scan(span0, span1)
+        idx = [j for j in range(S.size) if a <= tb[j] <= b]
+        if left is None:
+            idx.reverse()  # walk from the matched (right) side
+        region = []
+        for j in idx:
+            if S[j] > STEP_T:
+                region.append(j)
+            elif region:
+                break
+        if region:
+            j = max(region, key=lambda i: S[i])
+            return tb[j] - BLOCK / 2
     tb = None
     score = 0
     for m, sign in ((left, +1), (right, -1)):
@@ -439,6 +518,24 @@ def seeded_model(hum, log, lag, t0, t1, r=None, r_span=60e-6):
     return m, t0, t1
 
 
+def same_source(m, m0, tol=1.0):
+    """Do two models see the same hum source (the same original recording)?
+
+    Each harmonic reaches the microphone with its own fixed coupling phase,
+    so for harmonics a < b the combination a*theta_b - b*theta_a of the
+    residual phases is a fingerprint of the recording. It does not depend on
+    the model's time offset, clock ratio, or the log's own phase error, which
+    all shift theta_k in proportion to k.
+    """
+    common = [k for k in sorted(m0.bands, key=lambda k: -m0.weight[k]) if k in m.bands]
+    if len(common) < 2:
+        return True
+    a, b = sorted(common[:2])
+    fa = a * m.theta[b] - b * m.theta[a]
+    fb = a * m0.theta[b] - b * m0.theta[a]
+    return abs((fa - fb + np.pi) % (2 * np.pi) - np.pi) < tol
+
+
 def unexplained_runs(explained):
     runs, i, n = [], 0, explained.size
     while i < n:
@@ -454,6 +551,7 @@ def unexplained_runs(explained):
 
 
 def analyze(hum, log):
+    choose_bands_by_log(hum, log.L)
     e, n = hum.f, hum.f.size
     T = hum.duration
     free = free_step_scan(hum, hum.bands)
@@ -494,13 +592,13 @@ def analyze(hum, log):
                     if res is None:
                         continue
                     lag, c1, c2 = res
-                    if c1 >= 0.7 and c1 - c2 >= 0.05 and (best is None or c1 - c2 > best[0]):
+                    if c1 >= 0.7 and c1 - c2 >= LOCAL_GAP and (best is None or c1 - c2 > best[0]):
                         best = (c1 - c2, lag, i0, i0 + W, m0)
             if best is None:
                 continue
             _, lag, i0, i1, m0 = best
             m, s0_, s1_ = seeded_model(hum, log, lag, hum.t[i0], hum.t[i1 - 1], r=m0.r, r_span=3e-6)
-            if m is None or m.coh < 0.5 * m0.coh:
+            if m is None or m.coh < 0.6 * m0.coh or not same_source(m, m0):
                 tried.add((i0, id(m0)))  # do not try this hypothesis again
                 progress = True
                 break
