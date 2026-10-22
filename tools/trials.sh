@@ -24,6 +24,7 @@
 #
 # Usage: tools/trials.sh run|cheat claude|codex [n_concurrent] [n_attempts]
 set -euo pipefail
+export HARBOR_TELEMETRY=0  # no anonymous usage events to the Harbor developers
 export PATH="$HOME/.local/bin:$PATH"
 
 KIND=${1:?run or cheat}

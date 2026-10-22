@@ -4,6 +4,7 @@
 #
 # Usage: tools/run_validation.sh [task-dir] [jobs-dir]
 set -euo pipefail
+export HARBOR_TELEMETRY=0  # no anonymous usage events to the Harbor developers
 export PATH="$HOME/.local/bin:$PATH"
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)

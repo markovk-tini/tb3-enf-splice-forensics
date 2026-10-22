@@ -10,6 +10,7 @@
 #
 # Usage: tools/review.sh [task-dir]
 set -euo pipefail
+export HARBOR_TELEMETRY=0  # no anonymous usage events to the Harbor developers
 # python3 >= 3.11 (tomllib) from the static-check venv, then harbor
 export PATH="$HOME/tb3-ci-venv/bin:$HOME/.local/bin:$PATH"
 

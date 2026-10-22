@@ -5,6 +5,7 @@
 #
 # Usage: tools/analyze.sh <job-dir>
 set -euo pipefail
+export HARBOR_TELEMETRY=0  # no anonymous usage events to the Harbor developers
 export PATH="$HOME/tb3-ci-venv/bin:$HOME/.local/bin:$PATH"
 
 JOB=$(cd "${1:?job dir}" && pwd)
