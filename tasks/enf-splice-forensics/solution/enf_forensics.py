@@ -181,6 +181,108 @@ def circle_centre(Z):
     return centre
 
 
+def frame_timestamps(path):
+    """Presentation times (s) of all frames in display order, and the nominal frame rate."""
+    with av.open(str(path)) as c:
+        st = c.streams.video[0]
+        tb = float(st.time_base)
+        pts = sorted(p.pts for p in c.demux(st) if p.pts is not None)
+        fps = float(st.guessed_rate or st.average_rate)
+    return np.array(pts, dtype=float) * tb, fps
+
+
+def timing_baseband(path, T):
+    """A line-locked camera starts a frame every few mains cycles, so a DVR
+    that stamps frames as they arrive records the grid phase in the frame
+    times: frame n is n * 50/fps cycles after frame 0. Returns the baseband of
+    the mains fundamental, or None if the nominal rate does not divide 50 Hz."""
+    pts, fps = frame_timestamps(path)
+    per = NOM / fps
+    if abs(per - round(per)) > 1e-6 or pts.size < 100:
+        return None
+    pts = pts - pts[0]
+    tg = np.arange(int(T * BB)) / BB
+    cyc = np.interp(tg, pts, round(per) * np.arange(pts.size))
+    return {1: np.exp(2j * np.pi * (cyc - NOM * tg))}
+
+
+def baseband(x, fs, fc):
+    z = x * np.exp(-1j * (2 * np.pi * fc / fs) * np.arange(x.size))
+    factor = int(round(fs / BB))
+    for f in (20, factor // 20):
+        if f > 1:
+            z = sps.resample_poly(z, 1, f)
+    return z
+
+
+def sound(path):
+    """The sound track as float samples, its rate, and its start on the file timeline."""
+    with av.open(str(path)) as c:
+        if not c.streams.audio:
+            return None
+        st = c.streams.audio[0]
+        fs = st.rate
+        start = float(st.start_time * st.time_base) if st.start_time is not None else 0.0
+        x = np.concatenate([fr.to_ndarray().astype(np.float64).reshape(fr.to_ndarray().shape[0], -1).mean(axis=0)
+                            for fr in c.decode(st)])
+    peak = np.max(np.abs(x))
+    return (x / peak if peak > 0 else x), fs, start
+
+
+def sound_baseband(path, T):
+    """Baseband of every mains-hum harmonic the sound track can hold, on the file timeline."""
+    s = sound(path)
+    if s is None:
+        return None
+    x, fs, start = s
+    n = int(T * BB)
+    z = {}
+    for k in range(1, min(10, int((fs / 2 - 20) // NOM)) + 1):
+        y = baseband(x, fs, NOM * k) * np.exp(-2j * np.pi * NOM * k * start)
+        lead = int(round(start * BB))
+        y = np.concatenate([np.zeros(max(lead, 0), complex), y[max(-lead, 0):]])
+        z[k] = np.concatenate([y, np.zeros(max(0, n - y.size), complex)])[:n]
+    return z
+
+
+def av_offset(path):
+    """Seconds by which the sound lags the picture, or None.
+
+    Events that are both seen and heard give it: a light switched on or off
+    changes the brightness from one frame to the next, and the switch clicks.
+    The lag is the one most seen/heard pairs agree on."""
+    s = sound(path)
+    if s is None:
+        return None
+    x, fs, start = s
+    t, m = [], []
+    for ts, y in luma_frames(path):
+        t.append(ts)
+        m.append(float(LUT[y].mean()))
+    t, d = np.array(t), np.diff(np.log(np.array(m)))
+    thr = 8 * 1.4826 * np.median(np.abs(d - np.median(d))) + 0.05
+    seen = []
+    for i in np.flatnonzero(np.abs(d) > thr):
+        if not seen or t[i + 1] - seen[-1] > 1.0:
+            seen.append(t[i + 1])
+    blk = max(1, int(0.005 * fs))
+    nb = x.size // blk
+    e = (x[:nb * blk] ** 2).reshape(nb, blk).mean(axis=1)
+    bg = median_filter(e, size=401, mode="nearest") + 1e-12
+    heard = []
+    for i in np.flatnonzero(e / bg > 20):
+        tb_ = start + i * blk / fs
+        if not heard or tb_ - heard[-1] > 1.0:
+            heard.append(tb_)
+    lags = np.array(sorted(h - v for v in seen for h in heard if -10.0 < h - v < 10.0))
+    best = None
+    for lag in lags:
+        support = lags[np.abs(lags - lag) < 0.05]
+        if support.size >= 2 and (best is None or support.size > best.size):
+            best = support
+    return float(np.median(best)) if best is not None else None
+
+
 def flicker_baseband(path):
     """Baseband of the lamp flicker as k=2 (100 Hz) and k=4 (200 Hz) harmonics
     of the mains, sampled at BB on the file's timeline, and the file length."""
@@ -615,6 +717,24 @@ def exposure_step(model, t, gap=1.0):
     return looks_like_exposure(dth, np.log(np.abs(Ar[k][ar]).mean() / np.abs(Al[k][al]).mean()))
 
 
+def steady_coherence(m, t0, t1):
+    """Coherence of the phase with the model over [t0, t1], letting the phase
+    reference jump where the camera changed its exposure (see exposure_step):
+    an exposure change moves the flicker phase without moving the timing."""
+    tb, S = m.step_scan(t0, t1)
+    breaks = []
+    for j in np.flatnonzero(S > STEP_T):
+        t = tb[j]
+        if (not breaks or t - breaks[-1] > 3.0) and phase_change(m, t) > 0.6 and exposure_step(m, t):
+            breaks.append(t - BLOCK / 2)
+    if not breaks:
+        return m.coh
+    tb, W, v = m.blocks(t0, t1)
+    seg = np.searchsorted(breaks, tb)
+    num = sum(abs(W[k][v & (seg == s)].sum()) for k in W for s in np.unique(seg))
+    return num / (sum(np.abs(W[k][v]).sum() for k in W) + 1e-30)
+
+
 def split_unmatched(hum, a, b, free, min_len=60.0):
     """Edits inside a stretch the log does not explain: lasting steps of the
     flicker phase against the recording's own smoothed trace that are not
@@ -773,6 +893,40 @@ def same_source(m, m0, tol=1.0):
     return abs((d + np.pi) % (2 * np.pi) - np.pi) < tol
 
 
+def phase_anchor(hum, log, lo, hi, W=180, hop=30):
+    """A time for trace frames [lo, hi) that the frequency trace alone cannot
+    single out. A scheduled swing looks much the same every day, so its trace
+    matches several days almost equally; but only at the true time does the
+    flicker phase follow the phase integrated from the log for minutes on end.
+    Fit a phase model at each of the best few times of every window, and accept
+    a window whose best fit is near-perfect and clearly ahead of the rest.
+    Returns (coherence, model, t0, t1, lag) or None."""
+    e = hum.f
+    W = min(W, hi - lo - 8)
+    if W < 150:
+        return None
+    best = None
+    for i0 in range(lo + 4, hi - 4 - W + 1, hop):
+        c = masked_ncc(e[i0:i0 + W], log.L, min_frac=0.9)
+        cc = c.copy()
+        fits = []
+        for _ in range(3):
+            j = int(np.argmax(cc))
+            if cc[j] < 0.85:
+                break
+            m, s0_, s1_ = seeded_model(hum, log, j - i0, hum.t[i0], hum.t[i0 + W - 1])
+            fits.append((m.coh if m is not None else 0.0, m, s0_, s1_, j - i0))
+            cc[max(0, j - 60):j + 61] = -1
+        if not fits:
+            continue
+        fits.sort(key=lambda f: -f[0])
+        second = fits[1][0] if len(fits) > 1 else 0.0
+        if fits[0][1] is not None and fits[0][0] >= 0.98 and fits[0][0] - second >= 0.15:
+            if best is None or fits[0][0] > best[0]:
+                best = fits[0]
+    return best
+
+
 def unexplained_runs(explained):
     runs, i, n = [], 0, explained.size
     while i < n:
@@ -816,9 +970,10 @@ def analyze(hum, log):
         # 1) a stretch next to a dated part is first tested as more of the same
         #    recording, some seconds or minutes earlier or later (a cut, or
         #    pieces put back in another order). The frequency trace has to pick
-        #    one time near the neighbour's clearly; the hum phase must then
-        #    follow the log coherently with the neighbour's clock and carry the
-        #    same harmonic fingerprint (same original recording).
+        #    one time near the neighbour's clearly; the phase must then follow
+        #    the log with the neighbour's clock about as coherently as the
+        #    neighbour's own does (a chance match near it reaches 0.8 to 0.9,
+        #    real footage 0.95 and up), and carry the same lamp fingerprint.
         for lo, hi in runs:
             best = None
             for m0 in sorted([s[2] for s in segs], key=lambda m: -m.coh):
@@ -838,7 +993,7 @@ def analyze(hum, log):
                 continue
             _, lag, i0, i1, m0 = best
             m, s0_, s1_ = seeded_model(hum, log, lag, hum.t[i0], hum.t[i1 - 1], r=m0.r, r_span=3e-6)
-            if m is None or m.coh < 0.6 * m0.coh or not same_source(m, m0):
+            if m is None or steady_coherence(m, s0_, s1_) < 0.9 * m0.coh or not same_source(m, m0):
                 tried.add((i0, id(m0)))  # do not try this hypothesis again
                 progress = True
                 break
@@ -864,6 +1019,17 @@ def analyze(hum, log):
             accept(m, s0_, s1_, lo, hi, True, cl["lag"])
             progress = True
             break
+        if progress:
+            continue
+        # 3) where the trace leaves several times nearly tied, let the phase decide
+        for lo, hi in runs:
+            hit = phase_anchor(hum, log, lo, hi)
+            if hit is not None and (hit[4], id(hum)) not in tried:
+                tried.add((hit[4], id(hum)))
+                m, s0_, s1_ = hit[1], hit[2], hit[3]
+                accept(m, s0_, s1_, lo, hi, False, hit[4])
+                progress = True
+                break
         if not progress:
             break
     segs.sort(key=lambda s: s[0])
@@ -898,24 +1064,120 @@ def analyze(hum, log):
     merged[0][0], merged[-1][1] = 0.0, T
     final = []
     for a, b, m, _, _ in merged:
-        final += [(a, b, m)] if m is not None else [(x, y, None) for x, y in split_unmatched(hum, a, b, free)]
-    report = []
-    for a, b, m in final:
-        utc = None
-        if m is not None:
-            utc = (log.start + timedelta(seconds=m.s0 + m.r * a)).isoformat(timespec="milliseconds")
+        final += [[a, b, m]] if m is not None else [[x, y, None] for x, y in split_unmatched(hum, a, b, free)]
+    return final
+
+
+# ----------------------------------------------------------- per video, per case
+
+def examine(path, log):
+    """Analyse a video through every channel that can carry the grid: the
+    flicker bands, the frame timing (line-locked cameras) and the mains hum in
+    the sound track. Keep the channel whose analysis dates most of the video.
+    Times from the sound are moved to the picture by the A/V offset."""
+    zf, T, _ = flicker_baseband(path)
+    channels = [("flicker", zf, 0.0)]
+    zt = timing_baseband(path, T)
+    if zt is not None:
+        channels.append(("frame timing", zt, 0.0))
+    zs = sound_baseband(path, T)
+    if zs is not None:
+        channels.append(("sound", zs, None))
+    best = None
+    for name, z, shift in channels:
+        hum = Hum(z, T)
+        final = analyze(hum, log)
+        dated = sum(b - a for a, b, m in final if m is not None)
+        if best is None or dated > best["dated"] + 1.0:
+            best = dict(channel=name, hum=hum, final=final, dated=dated, shift=shift)
+    if best["shift"] is None:  # the sound's times, moved to the picture's
+        lag = av_offset(path)
+        best["shift"] = lag if lag is not None else 0.0
+    return best
+
+
+def locked_offset(ha, a, b, hb, a2, b2, k):
+    """Where in the other video's dated stretch [a2, b2] the footage [a, b]
+    was recorded, if anywhere: the offset d such that file time t here was
+    recorded with file time t + d there, and the phase coherence there.
+
+    Two recordings of the same grid at the same moments see the same wander
+    of the mains phase, so their k-th harmonic phasors stay locked together;
+    recordings of different moments drift apart within seconds."""
+    i0, i1 = np.searchsorted(ha.t, [a + WIN, b - WIN])
+    j0, j1 = np.searchsorted(hb.t, [a2 + WIN / 2, b2 - WIN / 2])
+    if i1 - i0 < 30 or j1 - j0 < i1 - i0 + 10:
+        return None
+    c = masked_ncc(ha.f[i0:i1], hb.f[j0:j1], min_frac=0.9)
+    j, c1, c2 = best_two(c, excl=20)
+    if c1 < 0.8 or c1 - c2 < 0.05:
+        return None
+    d0 = hb.t[j0 + j] - ha.t[i0]
+    tt = np.arange(int(np.ceil(a * BB)), int(b * BB)) / BB
+    za = ha.z[k][np.round(tt * BB).astype(int)]
+    best = (0.0, None)
+    for d in d0 + np.arange(-2.0, 2.0001, 0.02):
+        tb = (tt + d) * BB
+        if tb[0] < 0 or tb[-1] > hb.z[k].size - 2:
+            continue
+        i = np.floor(tb).astype(int)
+        w = tb - i
+        zb = hb.z[k][i] * (1 - w) + hb.z[k][i + 1] * w
+        y = za * np.conj(zb)
+        coh = abs(y.sum()) / (np.abs(y).sum() + 1e-30)
+        if coh > best[0]:
+            best = (coh, d)
+    return (best[1], best[0]) if best[1] is not None and best[0] >= 0.95 else None
+
+
+def cross_date(results):
+    """A stretch the log cannot explain may still come from a logged day: it
+    may have been recorded while the logger was down. Test it against the
+    other videos' dated footage; footage of the same moments is
+    phase-locked to it, and dates it."""
+    for name, r in results.items():
+        for st in r["final"]:
+            a, b, m = st
+            if m is not None or b - a < 60:
+                continue
+            found = None
+            for other, q in results.items():
+                common = [k for k in r["hum"].bands if k in q["hum"].bands and k in r["hum"].z and k in q["hum"].z]
+                if other == name or not common:
+                    continue
+                for a2, b2, m2 in q["final"]:
+                    if m2 is None:
+                        continue
+                    hit = locked_offset(r["hum"], a, b, q["hum"], a2, b2, common[0])
+                    if hit is not None and (found is None or hit[1] > found[1]):
+                        found = (hit[0], hit[1], m2)
+            if found is not None:
+                d, _, m2 = found  # the other video's signal at a + d is this one's at a
+                st[2] = ("other", m2.s0 + m2.r * (a + d))
+
+
+def report_of(r, log):
+    out = []
+    for a, b, m in r["final"]:
+        if m is None:
+            utc = None
+        else:
+            s = m[1] if isinstance(m, tuple) else m.s0 + m.r * a
+            utc = (log.start + timedelta(seconds=s + r["shift"])).isoformat(timespec="milliseconds")
             utc = utc.replace("+00:00", "Z")
-        report.append({"start": round(a, 3), "end": round(b, 3), "utc": utc})
-    return report
+        out.append({"start": round(a, 3), "end": round(b, 3), "utc": utc})
+    return out
 
 
 def main(evidence_dir, log_path, out_path):
     log = GridLog(log_path)
-    report = {}
+    results = {}
     for path in sorted(Path(evidence_dir).glob("*.mp4")):
-        z, T, _ = flicker_baseband(path)
-        report[path.name] = analyze(Hum(z, T), log)
-        print(path.name, json.dumps(report[path.name]), flush=True)
+        results[path.name] = examine(path, log)
+        r = results[path.name]
+        print(path.name, r["channel"], f"shift {r['shift']:+.2f} s", json.dumps(report_of(r, log)), flush=True)
+    cross_date(results)
+    report = {name: report_of(r, log) for name, r in results.items()}
     Path(out_path).write_text(json.dumps(report, indent=2) + "\n")
 
 
