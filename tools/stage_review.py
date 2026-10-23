@@ -23,7 +23,14 @@ def stage(tb3: Path, task: Path, out: Path) -> None:
     (environment / "instruction_word_counts.py").write_text(
         (tb3 / "scripts/review/instruction_word_counts.py").read_text()
     )
-    shutil.copytree(task, environment / "task-under-review" / task.name)
+    # like CI's git checkout of the PR: only files tracked by git
+    import subprocess
+    tracked = subprocess.run(["git", "-C", str(task), "ls-files", "."], check=True,
+                             capture_output=True, text=True).stdout.split()
+    dest = environment / "task-under-review" / task.name
+    for rel in tracked:
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(task / rel, dest / rel)
     (environment / "Dockerfile").write_text(
         "FROM ubuntu:24.04\n"
         "RUN apt-get update && apt-get install -y --no-install-recommends "
