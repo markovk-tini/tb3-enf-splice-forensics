@@ -1115,19 +1115,33 @@ def locked_offset(ha, a, b, hb, a2, b2, k):
     d0 = hb.t[j0 + j] - ha.t[i0]
     tt = np.arange(int(np.ceil(a * BB)), int(b * BB)) / BB
     za = ha.z[k][np.round(tt * BB).astype(int)]
-    best = (0.0, None)
-    for d in d0 + np.arange(-2.0, 2.0001, 0.02):
-        tb = (tt + d) * BB
+
+    def coherence(d, rho):
+        # file time tt here is file time a + d + rho * (tt - a) there; the two
+        # cameras' clocks differ by rho - 1, which turns the k * 50 Hz
+        # demodulation into a phase ramp unless it is taken out
+        tp = a + d + rho * (tt - a)
+        tb = tp * BB
         if tb[0] < 0 or tb[-1] > hb.z[k].size - 2:
-            continue
+            return 0.0
         i = np.floor(tb).astype(int)
         w = tb - i
         zb = hb.z[k][i] * (1 - w) + hb.z[k][i + 1] * w
-        y = za * np.conj(zb)
-        coh = abs(y.sum()) / (np.abs(y).sum() + 1e-30)
-        if coh > best[0]:
-            best = (coh, d)
-    return (best[1], best[0]) if best[1] is not None and best[0] >= 0.95 else None
+        y = za * np.conj(zb) * np.exp(-2j * np.pi * NOM * k * (tp - tt))
+        return abs(y.sum()) / (np.abs(y).sum() + 1e-30)
+
+    best = (0.0, d0, 1.0)
+    for rho in 1.0 + np.arange(-100e-6, 100.1e-6, 4e-6):
+        for d in d0 + np.arange(-1.5, 1.5001, 0.05):
+            c_ = coherence(d, rho)
+            if c_ > best[0]:
+                best = (c_, d, rho)
+    for rho in best[2] + np.arange(-4e-6, 4.01e-6, 0.5e-6):
+        for d in best[1] + np.arange(-0.06, 0.0601, 0.005):
+            c_ = coherence(d, rho)
+            if c_ > best[0]:
+                best = (c_, d, rho)
+    return (best[1], best[0]) if best[0] >= 0.95 else None
 
 
 def cross_date(results):
