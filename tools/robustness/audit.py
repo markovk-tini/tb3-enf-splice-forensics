@@ -3,6 +3,7 @@ flicker-derived trace single out the true log time? global: best other time
 anywhere in the log (same coverage); local: best other time within +-900 s, at
 least 30 s away. Also the flicker phase step at every joint and every exposure
 change, and the band depth change that comes with it."""
+import pickle
 import sys
 from pathlib import Path
 
@@ -34,33 +35,45 @@ key = plan.answer_key()
 log = E.GridLog(D / "grid" / "frequency_log.csv")
 
 
+examined = {}
+outage = []
+
+
 def hum_for(name):
-    cache = CACHE / f"{name}.{D.name}.npz"
+    """The channel the reference solution dates this video with (flicker,
+    frame timing or sound), and the A/V lag that moves sound times to the
+    picture."""
+    cache = CACHE / f"{name}.{D.name}.examined.pkl"
     if cache.exists():
-        d = np.load(cache)
-        z, T = {2: d["z2"], 4: d["z4"]}, float(d["T"])
+        r = pickle.loads(cache.read_bytes())
     else:
-        z, T, _ = E.flicker_baseband(D / "evidence" / name)
-        np.savez(cache, z2=z[2], z4=z[4], T=T)
-    hum = E.Hum(z, T)
-    E.choose_bands_by_log(hum, log.L)
-    return hum
+        r = E.examine(D / "evidence" / name, log)
+        cache.write_bytes(pickle.dumps(r))
+    examined[name] = r
+    return r["hum"]
 
 
-print("| Exhibit | Stretch | True time | r at true time | best other (log) | margin | best other (±15 min) | local margin |")
-print("|---|---|---|---|---|---|---|---|")
+print("| Exhibit | Channel | Stretch | True time | r at true time | best other (log) | margin | best other (±15 min) | local margin |")
+print("|---|---|---|---|---|---|---|---|---|")
 hums = {}
 for name in sorted(key):
     hum = hums[name] = hum_for(name)
+    ch, shift = examined[name]["channel"], examined[name]["shift"]
     for i, seg in enumerate(key[name]):
         i0, i1 = np.searchsorted(hum.t, [seg["start"] + 8, seg["end"] - 8])
         if seg["utc"] is None:
             c = E.masked_ncc(hum.f[i0:i1], log.L, min_frac=0.9)
             j, c1, c2 = E.best_two(c)
-            print(f"| {name} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | not in log | - | {c1:.3f} (any time) | "
+            print(f"| {name} | {ch} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | not in log | - | {c1:.3f} (any time) | "
                   f"{c1 - c2:+.3f} (best vs 2nd) | - | - |")
             continue
-        lag = int(round((seg["utc"] - log.start).total_seconds() - seg["start"] + E.WIN / 2))
+        s_true = (seg["utc"] - log.start).total_seconds() - shift  # when the channel's signal was recorded
+        if not log.valid(np.array([s_true, s_true + (seg["end"] - seg["start"]) / 2])).any():
+            outage.append((name, i, seg, hum))
+            print(f"| {name} | {ch} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | {seg['utc']:%d %H:%M:%S} | "
+                  f"no log readings (logger outage): see the table below | | | | |")
+            continue
+        lag = int(round(s_true - seg["start"] + E.WIN / 2))
         c_at, c2 = E.uniqueness(hum.f, log.L, i0, i1, lag)
         a = max(0, lag + i0 - 900)
         c = E.masked_ncc(hum.f[i0:i1], log.L[a:lag + i1 + 900], min_frac=0.9)
@@ -68,8 +81,36 @@ for name in sorted(key):
         cc = c.copy()
         cc[max(0, at - 30):at + 31] = -1
         c2l = float(cc.max())
-        print(f"| {name} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | {seg['utc']:%d %H:%M:%S} | {c_at:.3f} | {c2:.3f} | "
+        print(f"| {name} | {ch} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | {seg['utc']:%d %H:%M:%S} | {c_at:.3f} | {c2:.3f} | "
               f"{c_at - c2:+.3f} | {c2l:.3f} | {c_at - c2l:+.3f} |")
+
+# stretches recorded while the logger was down: matched against the other
+# videos' footage of the same minutes instead
+if outage:
+    print()
+    print("| Exhibit | Stretch | True time | Other video | r at the true offset | best other offset | margin |")
+    print("|---|---|---|---|---|---|---|")
+for name, i, seg, hum in outage:
+    i0, i1 = np.searchsorted(hum.t, [seg["start"] + 8, seg["end"] - 8])
+    for other in sorted(key):
+        if other == name:
+            continue
+        for k, oseg in enumerate(key[other]):
+            if oseg["utc"] is None:
+                continue
+            # the other stretch's file time at which the true moment of seg's start falls
+            ratio = 1 + plan.CAMERAS[plan.SESSIONS[plan.EXHIBITS[other][k].session].camera].clock_ppm * 1e-6
+            t_other = oseg["start"] + (seg["utc"] - oseg["utc"]).total_seconds() * ratio
+            if not (oseg["start"] <= t_other and t_other + (seg["end"] - seg["start"]) <= oseg["end"]):
+                continue
+            ho = hums[other]
+            c = E.masked_ncc(hum.f[i0:i1], ho.f, min_frac=0.9)
+            at = int(np.argmin(np.abs(ho.t - (t_other + 8))))
+            c_at = float(c[max(0, at - 1):at + 2].max())
+            cc = c.copy()
+            cc[max(0, at - 20):at + 21] = -1
+            print(f"| {name} | {i} ({seg['start']:.0f}-{seg['end']:.0f} s) | {seg['utc']:%d %H:%M:%S} | {other} | "
+                  f"{c_at:.3f} | {cc.max():.3f} | {c_at - cc.max():+.3f} |")
 
 # measured flicker steps at joints and exposure changes, from the footage itself
 print()

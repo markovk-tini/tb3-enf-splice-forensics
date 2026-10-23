@@ -1,6 +1,6 @@
 """Move each decision threshold of the reference solution down and up on its own,
-re-run the analysis on the official data (cached flicker basebands), score."""
-import json
+re-run the analysis on the official data (decoded channels cached), score."""
+import pickle
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,14 +20,22 @@ import enf_forensics as E
 D = Path(sys.argv[1])
 key = plan.answer_key()
 log = E.GridLog(D / "grid" / "frequency_log.csv")
-Z = {}
-for name in sorted(key):
-    cache = CACHE / f"{name}.{D.name}.npz"
-    if not cache.exists():
-        z, T, _ = E.flicker_baseband(D / "evidence" / name)
-        np.savez(cache, z2=z[2], z4=z[4], T=T)
-    d = np.load(cache)
-    Z[name] = ({2: d["z2"], 4: d["z4"]}, float(d["T"]))
+def memoised(name):
+    """Decode each video's channels once per data set; every variant reuses them."""
+    real = getattr(E, name)
+
+    def f(path, *args):
+        cache = CACHE / f"{Path(path).name}.{D.name}.{name}.pkl"
+        if cache.exists():
+            return pickle.loads(cache.read_bytes())
+        out = real(path, *args)
+        cache.write_bytes(pickle.dumps(out))
+        return out
+    return f
+
+
+for _name in ("flicker_baseband", "timing_baseband", "sound_baseband", "av_offset"):
+    setattr(E, _name, memoised(_name))
 
 
 def check(got, want):
@@ -47,19 +55,22 @@ def check(got, want):
 
 
 def run():
+    """The reference solution end to end (channels, A/V offset, cross-video dating), scored."""
     E._LOG_FFT.clear()
+    results = {name: E.examine(D / "evidence" / name, log) for name in sorted(key)}
+    E.cross_date(results)
     bad = {}
     for name in sorted(key):
-        z, T = Z[name]
-        rep = E.analyze(E.Hum(dict(z), T), log)
-        r = check(rep, key[name])
+        r = check(E.report_of(results[name], log), key[name])
         if r:
             bad[name] = r
     return bad
 
 
 VARIANTS = [("STEP_T", 25.0, 18.0, 35.0), ("FREE_STEP_T", 30.0, 20.0, 45.0), ("CUSUM_DROP", 12.0, 8.0, 18.0),
-            ("ANCHOR_GAP", 0.05, 0.035, 0.07), ("LOCAL_GAP", 0.05, 0.035, 0.07), ("GROUP_CORR", 0.35, 0.25, 0.5)]
+            ("ANCHOR_GAP", 0.05, 0.035, 0.07), ("LOCAL_GAP", 0.05, 0.035, 0.07), ("GROUP_CORR", 0.35, 0.25, 0.5),
+            ("LOCAL_COH", 0.9, 0.85, 0.95), ("TIE_COH", 0.98, 0.97, 0.99), ("TIE_LEAD", 0.15, 0.1, 0.2),
+            ("LOCK_COH", 0.95, 0.92, 0.98)]
 print("baseline:", run() or "all correct", flush=True)
 for name, default, lo, hi in VARIANTS:
     row = []

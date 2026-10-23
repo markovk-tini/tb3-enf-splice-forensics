@@ -681,6 +681,10 @@ GROUP_CORR = 0.35    # rank correlation for two harmonics to count as moving tog
 ANCHOR_GAP = 0.05    # margin over the second-best log time for a global match
 LOCAL_GAP = 0.05     # margin for a match near a neighbouring stretch's time
 CUSUM_DROP = 12.0    # how far phase agreement may fall before a model stops growing
+LOCAL_COH = 0.9      # a continuation must be this coherent, relative to its neighbour
+TIE_COH = 0.98       # phase fit that settles a tie between days ...
+TIE_LEAD = 0.15      # ... and its lead over the runner-up
+LOCK_COH = 0.95      # phase locking that dates footage against another video
 
 
 def phase_change(model, t, span=4.0, gap=1.0):
@@ -921,7 +925,7 @@ def phase_anchor(hum, log, lo, hi, W=180, hop=30):
             continue
         fits.sort(key=lambda f: -f[0])
         second = fits[1][0] if len(fits) > 1 else 0.0
-        if fits[0][1] is not None and fits[0][0] >= 0.98 and fits[0][0] - second >= 0.15:
+        if fits[0][1] is not None and fits[0][0] >= TIE_COH and fits[0][0] - second >= TIE_LEAD:
             if best is None or fits[0][0] > best[0]:
                 best = fits[0]
     return best
@@ -993,7 +997,7 @@ def analyze(hum, log):
                 continue
             _, lag, i0, i1, m0 = best
             m, s0_, s1_ = seeded_model(hum, log, lag, hum.t[i0], hum.t[i1 - 1], r=m0.r, r_span=3e-6)
-            if m is None or steady_coherence(m, s0_, s1_) < 0.9 * m0.coh or not same_source(m, m0):
+            if m is None or steady_coherence(m, s0_, s1_) < LOCAL_COH * m0.coh or not same_source(m, m0):
                 tried.add((i0, id(m0)))  # do not try this hypothesis again
                 progress = True
                 break
@@ -1141,7 +1145,7 @@ def locked_offset(ha, a, b, hb, a2, b2, k):
             c_ = coherence(d, rho)
             if c_ > best[0]:
                 best = (c_, d, rho)
-    return (best[1], best[0]) if best[0] >= 0.95 else None
+    return (best[1], best[0]) if best[0] >= LOCK_COH else None
 
 
 def cross_date(results):

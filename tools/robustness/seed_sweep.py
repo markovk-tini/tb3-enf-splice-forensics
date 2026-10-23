@@ -41,6 +41,9 @@ NOMINAL_PIECES = {
     "exhibit_06.mp4": [("S10", 207.1, 401.6), ("S10", 0.0, 207.1), ("S10", 401.6, 600.0)],
     "exhibit_07.mp4": [("S5", 0.0, 401.2), ("S5", 406.8, 560.0)],
     "exhibit_08.mp4": [("S7", 0.0, 546.5), ("S7", 563.9, 720.0)],
+    "exhibit_09.mp4": [("S12", 0.0, 420.0)],
+    "exhibit_10.mp4": [("S15", 0.0, 360.0)],
+    "exhibit_11.mp4": [("S13", 0.0, 212.6), ("S14", 25.0, 130.4), ("S13", 212.6, 600.0)],
 }
 NOMINAL_STARTS = {"S11": plan._t(9, 18, 40, 3.6), "S9": plan._t(6, 19, 57, 30.8)}
 
@@ -104,9 +107,7 @@ def check(got, want):
 
 def solve_one(args):
     path, log_path = args
-    log = ef.GridLog(log_path)
-    z, T, _ = ef.flicker_baseband(path)
-    return path.name, ef.analyze(ef.Hum(z, T), log)
+    return path.name, ef.examine(path, ef.GridLog(log_path))
 
 
 def run(seed, workers=8):
@@ -130,7 +131,10 @@ def run(seed, workers=8):
             "sessions": {n: s.start.isoformat() for n, s in plan.SESSIONS.items()},
             "exhibits": {n: [[p.session, p.src_start, p.src_end] for p in ps] for n, ps in plan.EXHIBITS.items()}}))
         with get_context("fork").Pool(workers) as pool:
-            reports = dict(pool.imap_unordered(solve_one, [(ev / n, out / "grid" / "frequency_log.csv") for n in sorted(key)]))
+            examined = dict(pool.imap_unordered(solve_one, [(ev / n, out / "grid" / "frequency_log.csv") for n in sorted(key)]))
+        ef.cross_date(examined)  # footage the log cannot explain, dated against the other videos
+        log = ef.GridLog(out / "grid" / "frequency_log.csv")
+        reports = {n: ef.report_of(examined[n], log) for n in sorted(examined)}
         (out / "report.json").write_text(json.dumps(reports, indent=1, default=float))
         results = {n: check(reports[n], key[n]) for n in sorted(key)}
     finally:

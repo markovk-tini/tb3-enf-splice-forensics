@@ -100,12 +100,27 @@ python3 tools/summarize.py jobs/<job> [jobs/<job> ...]
 
 ```bash
 pip install numpy==2.3.4 scipy==1.16.3 av==19.0.2
-cd tasks/enf-splice-forensics/tests && python synthesize_evidence.py ../environment/data 8
+cd tasks/enf-splice-forensics/tests && python synthesize_evidence.py ../environment/data 11
 python case_plan.py   # prints the answer key
 ```
 
 The second argument is the number of worker processes (one exhibit each); the
 output is byte-identical for any worker count. Rendering takes about 1.5 min
-with 8 workers.
+with 11 workers.
 
-The audio version of the task (iteration 1) is tagged `iteration-1-audio`.
+Earlier versions of the task are tagged `iteration-1-audio` and
+`iteration-2-video`.
+
+## Reference-solution robustness
+
+```bash
+pip install numpy==2.3.4 scipy==1.16.3 av==19.0.2
+python tools/robustness/audit.py <data-dir>        # identifiability of every stretch and edit
+python tools/robustness/perturb.py <data-dir>      # each threshold moved down and up, rescored
+SWEEP_OUT=sweep python tools/robustness/seed_sweep.py 1 2 3 4 5 6   # other random draws, re-solved
+```
+
+`<data-dir>` holds `evidence/` and `grid/` (for the committed data,
+`tasks/enf-splice-forensics/environment/data`). Decoded channels are cached in
+`$ENF_CACHE` (default: the system temp directory). Results are in
+`results/identifiability-audit.md` and `results/oracle-robustness.md`.
