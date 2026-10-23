@@ -45,6 +45,7 @@ solved by both agents in about half an hour. See
 | `/run` codex · gpt-6.1-sol · xhigh | ✅ 3/3 genuine failures (reward 0.0; 12 of 13 tests each) | [`results/trials.md`](results/trials.md) |
 | `/cheat` claude-code · claude-opus-5-5 · max | ✅ reward 0.0 (searched for a bypass, found none) | [`results/cheat.md`](results/cheat.md) |
 | `/cheat` codex · gpt-6.1-sol · xhigh | ⚠️ reward 0.0, but refused by OpenAI's safety filter at the first turn (no attempt) | [`results/cheat.md`](results/cheat.md) |
+| Trial analysis (hosted-style, claude-code + claude-sonnet-5; 3 of 6 `/run` trials) | task specification ✅, reward hacking ✅, difficulty crux ✅, refusals ✅, timeout ✅; near miss ❌ on all three (discussed) | [`results/trial-analysis.md`](results/trial-analysis.md) |
 
 Failure analysis: [`results/failure-analysis.md`](results/failure-analysis.md).
 

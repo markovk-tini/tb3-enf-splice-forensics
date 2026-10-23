@@ -19,6 +19,11 @@ trial also left the outage insert of exhibit_11 undated.
 Trial details, including the trials that did not count, are in
 [`trials.md`](trials.md).
 
+TB3's automated trial review, run on three of the six trials, agrees that the
+task specification is clear, that there was no reward hacking and that the
+failures are the difficulty the task describes; it also flags the trials as
+near misses, which [`trial-analysis.md`](trial-analysis.md) discusses.
+
 ## What the agents got right
 
 A lot. Both agents recognised within minutes that the grid has to be recovered

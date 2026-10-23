@@ -182,13 +182,15 @@ def coherence_at(hum, lag, i0, i1):
     return m.fit(hum.t[i0], hum.t[i1 - 1])
 
 
+in_outage = {(n, i) for n, i, _, _ in outage}
 for name in sorted(key):
     hum = hums[name]
     for i, seg in enumerate(key[name]):
-        if seg["utc"] is None:
+        if seg["utc"] is None or (name, i) in in_outage:  # no log to be coherent with
             continue
         i0, i1 = np.searchsorted(hum.t, [seg["start"] + 8, seg["end"] - 8])
-        lag = int(round((seg["utc"] - log.start).total_seconds() - seg["start"] + E.WIN / 2))
+        s_true = (seg["utc"] - log.start).total_seconds() - examined[name]["shift"]  # the signal's own time
+        lag = int(round(s_true - seg["start"] + E.WIN / 2))
         c = E.masked_ncc(hum.f[i0:i1], log.L, min_frac=0.9)
         cc = c.copy()
         cc[max(0, lag + i0 - 60):lag + i0 + 61] = -1
