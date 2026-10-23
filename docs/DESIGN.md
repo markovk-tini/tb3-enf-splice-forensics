@@ -206,4 +206,15 @@ boundaries to ±1 s and a time to ±2 s within a four-day span.
    - cross-video phase locking ignored the two cameras' 14 ppm clock
      difference, which over 105 s turns the 100 Hz demodulation into a 0.9 rad
      ramp and pulled the outage insert 1.8 s off; the relative rate is now
-     fitted, and the insert is dated within 0.18 s.
+     fitted, and the insert is dated within 0.18 s;
+   - fitting that rate freely (±100 ppm) let unrelated footage lock by chance:
+     in one random draw of the seed sweep an out-of-log insert locked at 0.977
+     to footage from four days earlier. The rate is now taken from the two
+     videos' own dated stretches (the lock threshold sits between the best
+     chance lock, 0.938, and the true one, 0.997).
+
+   Result: 3 of 3 genuine failures for each agent (`results/trials.md`). Every
+   trial got at least nine of the eleven videos right, five of six got ten,
+   all six found the line-locked camera's frame timing, five of six dated the
+   outage insert through exhibit_08, and every one dated exhibit_10 by its
+   sound track, 3.3 to 3.6 s from its picture (`results/failure-analysis.md`).
