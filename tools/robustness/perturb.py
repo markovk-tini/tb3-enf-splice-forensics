@@ -70,9 +70,12 @@ def run():
 VARIANTS = [("STEP_T", 25.0, 18.0, 35.0), ("FREE_STEP_T", 30.0, 20.0, 45.0), ("CUSUM_DROP", 12.0, 8.0, 18.0),
             ("ANCHOR_GAP", 0.05, 0.035, 0.07), ("LOCAL_GAP", 0.05, 0.035, 0.07), ("GROUP_CORR", 0.35, 0.25, 0.5),
             ("LOCAL_COH", 0.9, 0.85, 0.95), ("TIE_COH", 0.98, 0.97, 0.99), ("TIE_LEAD", 0.15, 0.1, 0.2),
-            ("LOCK_COH", 0.95, 0.92, 0.98)]
+            ("LOCK_COH", 0.97, 0.95, 0.99)]
 print("baseline:", run() or "all correct", flush=True)
+ONLY = set(sys.argv[2:])  # optional: names of the thresholds to vary (default: all)
 for name, default, lo, hi in VARIANTS:
+    if ONLY and name not in ONLY:
+        continue
     row = []
     for v in (lo, hi):
         setattr(E, name, v)
@@ -82,6 +85,8 @@ for name, default, lo, hi in VARIANTS:
     print(f"| `{name}` | {default:g} | {row[0]} | {row[1]} |", flush=True)
 
 # exposure test: minimum depth change and how much of the sinc bound is required
+if ONLY and "exposure" not in ONLY:
+    sys.exit(0)
 orig = E.looks_like_exposure
 for label, mn, frac in (("depth change > 0.10", 0.10, 0.8), ("depth change > 0.25", 0.25, 0.8),
                         ("sinc bound x0.6", 0.15, 0.6), ("sinc bound x1.0", 0.15, 1.0)):

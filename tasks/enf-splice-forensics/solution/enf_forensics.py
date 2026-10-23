@@ -684,7 +684,7 @@ CUSUM_DROP = 12.0    # how far phase agreement may fall before a model stops gro
 LOCAL_COH = 0.9      # a continuation must be this coherent, relative to its neighbour
 TIE_COH = 0.98       # phase fit that settles a tie between days ...
 TIE_LEAD = 0.15      # ... and its lead over the runner-up
-LOCK_COH = 0.95      # phase locking that dates footage against another video
+LOCK_COH = 0.97      # phase locking that dates footage against another video (true 0.997, chance <= 0.94)
 
 
 def phase_change(model, t, span=4.0, gap=1.0):

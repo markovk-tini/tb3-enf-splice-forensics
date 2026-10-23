@@ -110,7 +110,7 @@ def solve_one(args):
     return path.name, ef.examine(path, ef.GridLog(log_path))
 
 
-def run(seed, workers=8):
+def run(seed, workers=int(os.environ.get("SWEEP_WORKERS", "8"))):
     t0 = time.time()
     out = OUT / f"seed_{seed}"
     se.SEED = seed
