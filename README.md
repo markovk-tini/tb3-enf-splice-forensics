@@ -38,9 +38,9 @@ solved by both agents in about half an hour. See
 |---|---|---|
 | Static checks (28) | ✅ 28/28 pass | [`results/static-checks.md`](results/static-checks.md) |
 | Implementation rubric review (36 criteria, claude-code + claude-sonnet-5) | _re-running on v3_ | [`results/rubric-review.md`](results/rubric-review.md) |
-| Docker build | _re-running on v3_ | [`results/validation.md`](results/validation.md) |
-| Oracle validation | _re-running on v3_ | [`results/validation.md`](results/validation.md) |
-| Nop validation | _re-running on v3_ | [`results/validation.md`](results/validation.md) |
+| Docker build | ✅ | [`results/validation.md`](results/validation.md) |
+| Oracle validation | ✅ reward 1.0 (13/13 tests) | [`results/validation.md`](results/validation.md) |
+| Nop validation | ✅ reward 0.0 (0/13 tests) | [`results/validation.md`](results/validation.md) |
 | `/run` claude-code · claude-opus-5-5 · max | _pending_ | [`results/trials.md`](results/trials.md) |
 | `/run` codex · gpt-6.1-sol · xhigh | _pending_ | [`results/trials.md`](results/trials.md) |
 | `/cheat` claude-code · claude-opus-5-5 · max | _pending_ | [`results/cheat.md`](results/cheat.md) |
