@@ -4,13 +4,20 @@ An original Terminal-Bench 3 task, built and evaluated against the current
 TB3 CI (`harbor-framework/terminal-bench-3` @ `58a97b0`, Harbor
 `0.23.1.dev202609170426`).
 
-**The task.** Eight audio recordings were "handed in as unedited originals".
-Some were cut, or had audio from another time spliced in. Using the mains hum
-the recordings picked up and the grid operator's one-second frequency log, the
-agent has to find every edit (to 1 s) and say when each unedited stretch was
-recorded (to 2 s), or `null` if it was recorded on a day the log does not
-cover. This is electrical network frequency (ENF) analysis, the technique
-forensic audio examiners use to date and authenticate recordings for court.
+**The task.** Eight silent camera videos were "handed in as unedited original
+footage". Some were cut, rearranged, or had footage from another time spliced
+in. The scenes were lit by mains-powered lamps, which flicker at twice the grid
+frequency; rolling-shutter cameras record that flicker as faint moving bands.
+Using those bands and the grid operator's one-second frequency log, the agent
+has to find every edit (to 1 s) and say when each unedited stretch was recorded
+(to 2 s), or `null` if it was recorded on a day the log does not cover. This is
+electrical network frequency (ENF) analysis, the technique forensic examiners
+use to date and authenticate recordings for court, applied to video.
+
+The first version of the task used audio recordings and was solved by
+GPT-6.1-sol in 3 of 3 trials; see
+[`results/iteration-1.md`](results/iteration-1.md) and
+[`docs/DESIGN.md`](docs/DESIGN.md#iteration-history).
 
 | | |
 |---|---|
@@ -24,7 +31,7 @@ forensic audio examiners use to date and authenticate recordings for court.
 | Check (TB3 CI) | Result | Details |
 |---|---|---|
 | Static checks (28) | ✅ 28/28 pass | [`results/static-checks.md`](results/static-checks.md) |
-| Implementation rubric review (36 criteria, claude-code + claude-sonnet-5) | ✅ 33 pass, 3 n/a, 0 fail | [`results/rubric-review.md`](results/rubric-review.md) |
+| Implementation rubric review (36 criteria, claude-code + claude-sonnet-5) | _re-running on the video version_ | [`results/rubric-review.md`](results/rubric-review.md) |
 | Docker build | ✅ | [`results/validation.md`](results/validation.md) |
 | Oracle validation | ✅ reward 1.0 (10/10 tests) | [`results/validation.md`](results/validation.md) |
 | Nop validation | ✅ reward 0.0 (0/10 tests) | [`results/validation.md`](results/validation.md) |
@@ -64,7 +71,7 @@ Design, verification strategy and iteration history: [`docs/DESIGN.md`](docs/DES
 tasks/enf-splice-forensics/   the task (TB3 format)
   instruction.md              agent-facing instruction
   task.toml                   metadata, timeouts, resources (separate verifier)
-  environment/                agent image: 8 FLAC exhibits + grid log
+  environment/                agent image: 8 MP4 exhibits + grid log
   solution/                   reference solution (enf_forensics.py)
   tests/                      verifier image: answer key (case_plan.py), tests, generator
 tools/                        local equivalents of the TB3 CI jobs

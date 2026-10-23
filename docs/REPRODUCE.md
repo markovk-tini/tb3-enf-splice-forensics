@@ -99,7 +99,13 @@ python3 tools/summarize.py jobs/<job> [jobs/<job> ...]
 ## Regenerating the evidence
 
 ```bash
-pip install numpy==2.3.4 scipy==1.16.3 soundfile==0.13.1
-cd tasks/enf-splice-forensics/tests && python synthesize_evidence.py ../environment/data
+pip install numpy==2.3.4 scipy==1.16.3 av==19.0.2
+cd tasks/enf-splice-forensics/tests && python synthesize_evidence.py ../environment/data 8
 python case_plan.py   # prints the answer key
 ```
+
+The second argument is the number of worker processes (one exhibit each); the
+output is byte-identical for any worker count. Rendering takes about 1.5 min
+with 8 workers.
+
+The audio version of the task (iteration 1) is tagged `iteration-1-audio`.

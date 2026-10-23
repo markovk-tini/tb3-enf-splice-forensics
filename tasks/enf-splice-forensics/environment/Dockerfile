@@ -9,14 +9,13 @@ RUN apt-get update && \
         python3-pip \
         python3-venv \
         ffmpeg \
-        libsndfile1 \
         ca-certificates \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# The recordings and the grid log are the only inputs; the answer key, the
+# The videos and the grid log are the only inputs; the answer key, the
 # generator and the reference solution never enter this image.
 COPY data/evidence /app/evidence
 COPY data/grid /app/grid
