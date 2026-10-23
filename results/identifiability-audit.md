@@ -74,3 +74,45 @@ the direction and by at least the amount a change of exposure time implies
 shows that the timing is unchanged across them; in exhibit_02, which the log
 does not cover, the band depth, the brightness transient and the person
 walking through the moment are the evidence.
+
+## 3. Phase coherence alone does not date a short stretch
+
+At the true time the flicker phase follows the phase integrated from the log
+almost perfectly. One might expect any other time to be ruled out the same
+way, because the grid's fast fluctuations differ from day to day. The table
+fits a phase model (offset plus clock ratio) at the true time and at each of
+the five strongest other trace matches anywhere in the log.
+
+| Exhibit | Stretch | Coherence at true time | Best coherence at another time (top-5 trace matches) |
+|---|---|---|---|
+| exhibit_01.mp4 | 0 (0-251 s) | 0.998 | 0.840 |
+| exhibit_01.mp4 | 1 (251-441 s) | 0.999 | 0.949 |
+| exhibit_01.mp4 | 2 (441-599 s) | 0.998 | 0.967 |
+| exhibit_01.mp4 | 3 (599-740 s) | 0.998 | 0.919 |
+| exhibit_03.mp4 | 0 (0-540 s) | 0.995 | 0.586 |
+| exhibit_04.mp4 | 0 (0-265 s) | 0.992 | 0.765 |
+| exhibit_04.mp4 | 2 (348-621 s) | 0.995 | 0.787 |
+| exhibit_05.mp4 | 0 (0-288 s) | 0.963 | 0.818 |
+| exhibit_05.mp4 | 1 (288-422 s) | 0.948 | 0.940 |
+| exhibit_05.mp4 | 2 (422-563 s) | 0.999 | 0.981 |
+| exhibit_06.mp4 | 0 (0-194 s) | 0.998 | 0.938 |
+| exhibit_06.mp4 | 1 (194-402 s) | 0.997 | 0.952 |
+| exhibit_06.mp4 | 2 (402-600 s) | 0.998 | 0.860 |
+| exhibit_07.mp4 | 0 (0-401 s) | 0.999 | 0.798 |
+| exhibit_07.mp4 | 1 (401-554 s) | 0.999 | 0.881 |
+| exhibit_08.mp4 | 0 (0-546 s) | 0.998 | 0.565 |
+| exhibit_08.mp4 | 1 (546-703 s) | 0.998 | 0.987 |
+
+The true time is coherent throughout (0.948 to 0.999; the two lowest values
+are the exhibit_05 stretches that contain an exposure change, whose phase step
+the plain model does not allow for). But for two- to three-minute stretches,
+times on other days that the trace match already ranks highly can also be very
+coherent: exhibit_08's last stretch reaches 0.987 at a time 18 hours
+earlier. Measured on the simulated grid itself, two random 140 s windows
+on different days have a median coherence of 0.33, but one pair in ten exceeds
+0.70, and among 345,600 candidate times the best ones come close to 1. So a
+date for a short stretch is only safe with the trace match, the phase and the
+neighbouring stretches taken together, which is how the reference solution
+dates the stretches with the smallest margins (exhibit_08's last stretch:
+global trace margin +0.037, but +0.112 within ±15 min of where its neighbour
+puts it).

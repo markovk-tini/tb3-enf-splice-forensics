@@ -54,4 +54,28 @@ people, camera jitter, frame drops and sensor noise; same case plan, every
 joint re-nudged the same way to a phase step of at least 1.2 rad), then the
 unchanged reference solution scored with the verifier's rules.
 
-_Running._
+| Seed | Exhibits correct | Misses |
+|---|---|---|
+| 1 | 6/8 | 01 (insert undated), 08 (nothing dated) |
+| 2 | 8/8 | |
+| 3 | 6/8 | 01 (insert undated), 04 (first boundary 2.8 s late) |
+| 4 | 6/8 | 01 (insert undated), 05 (a stretch split in two) |
+| 5 | 7/8 | 04 (an extra stretch) |
+| 6 | 8/8 | |
+| **Total** | **41/48** | |
+
+`audit.py` run on the failing draws shows where the misses come from. The
+three undated inserts in exhibit_01 have global trace margins of only +0.083,
++0.044 and +0.029 in those draws. The 3.2 min insert is still the best match
+for its true time, but no 180 s window inside it clears the solution's 0.05
+anchor margin, so the solution leaves it `null` rather than guess. In seed 1,
+the best global match for exhibit_08's first stretch is a wrong time (margin
+−0.031). Its last stretch would date correctly but is shorter than the
+solution's 180 s anchor window, so nothing gets dated. The other three misses
+are in draws where exhibit_04's and exhibit_05's margins are among the
+smallest of the sweep (+0.027 to +0.057). The committed draw has no such weak
+spot: every dated stretch is its own best match in the whole log, and the
+weakest (+0.037) is next to a neighbour that pins it down (section 1).
+
+For comparison, the audio version of the task scored 38/48 on the same kind
+of sweep.
