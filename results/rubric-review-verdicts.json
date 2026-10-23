@@ -2,147 +2,147 @@
   "checks": {
     "verifiable": {
       "outcome": "pass",
-      "explanation": "The verifier only parses /app/report.json against a programmatically derived answer key (case_plan.py); it is pure deterministic JSON/number comparison with no execution of agent code or network calls. I ran test_report.py against the reference output and it passed deterministically with no flakiness possible."
+      "explanation": "The verifier only parses /app/report.json and compares it against case_plan.answer_key(), which is a deterministic, non-randomized derivation from the plan; no agent code is executed and no network is used. I confirmed this by running the reference solution and the exact test.sh pytest invocation, which deterministically passed all 10 checks."
     },
     "solvable": {
       "outcome": "pass",
-      "explanation": "I installed the pinned numpy/scipy/soundfile versions, ran solution/enf_forensics.py against environment/data, and the resulting report.json passed all 10 pytest checks in tests/test_report.py in about 72 seconds, well within the task's 4-hour agent timeout."
+      "explanation": "I installed the pinned numpy/scipy/av versions, ran solution/enf_forensics.py against the actual environment/data evidence, and it completed in ~3m15s and produced a report.json that passed all 10 pytest checks in tests/test_report.py."
     },
     "difficult": {
       "outcome": "pass",
-      "explanation": "The task requires extracting ENF phase from hum 30-40 dB below noise, modeling per-device clock drift, disambiguating interfering tones, and correlating against a log with gaps and out-of-range days — this is genuine signal-processing/forensics expertise beyond an undergraduate exercise."
+      "explanation": "The task requires recovering sub-millihertz mains-frequency traces from 1-3% rolling-shutter flicker bands in compressed video, distinguishing splices from auto-exposure phase steps, and handling clock drift, dropped frames, and an undated/out-of-order session — genuine signal-processing and forensic-reasoning expertise well beyond an undergraduate course project."
     },
     "interesting": {
       "outcome": "pass",
-      "explanation": "ENF-based audio authentication is an established real-world forensic technique used by police and forensic labs to date and validate recordings for legal proceedings, as described in the README."
+      "explanation": "ENF analysis of video is an established forensic authentication technique (parallel to the well-known ENF analysis of audio used by police/forensic labs), and the README credibly ties it to the author's real camera-pipeline work; a forensic video examiner would plausibly need exactly this capability."
     },
     "outcome_verified": {
       "outcome": "pass",
-      "explanation": "The instruction only specifies the desired end-state JSON report; it does not prescribe any particular algorithm, tool, or library, and the verifier only checks the final report's content."
+      "explanation": "Instructions state the end goal (locate edits, date each stretch) and output format without prescribing any method, tool, or library; the tests only check the final report.json content."
     },
     "anti_cheat_robustness": {
       "outcome": "pass",
-      "explanation": "environment/Dockerfile only copies the evidence audio and grid log, never case_plan.py (answer key), synthesize_evidence.py, or the solution; the verifier runs in a separate torn-down container, so the agent has no path to the ground truth."
+      "explanation": "The agent image only ships environment/data/evidence and environment/data/grid (confirmed via Dockerfile and by checking video container metadata — no leaked creation timestamps); case_plan.py, synthesize_evidence.py, and the reference solution live only in tests/ or solution/, which the agent never sees in separate-verifier mode."
     },
     "task_security": {
       "outcome": "pass",
-      "explanation": "All Dockerfiles, scripts, and test code perform only legitimate setup/verification actions (apt/pip installs of declared packages, copying task data); no exfiltration, obfuscation, or host-escape patterns were found."
+      "explanation": "All Dockerfiles, scripts, and test code perform only legitimate setup/verification actions (apt installs, pip installs of pinned forensics/testing libraries, local file parsing); no exfiltration, obfuscation, or prompt injection was found."
     },
     "functional_verification": {
       "outcome": "pass",
-      "explanation": "test_report.py numerically compares reported stretch boundaries and UTC timestamps against a derived answer key with explicit tolerances; it performs no string/keyword matching on agent code or output beyond structural JSON validation."
+      "explanation": "test_report.py checks parsed numeric/timestamp values (stretch tiling, boundary offsets, UTC offsets) against a derived answer key — no string/keyword matching against source or video content."
     },
     "deterministic_reproducible": {
       "outcome": "pass",
-      "explanation": "Dependencies are pinned (numpy==2.3.4, scipy==1.16.3, soundfile==0.13.1, pytest==9.1.1, pytest-json-ctrf==0.5.2), evidence generation is seeded, and there are no live service dependencies; I confirmed a clean deterministic pass end-to-end."
+      "explanation": "Both Dockerfiles pin base images by digest and pin all pip package versions (numpy/scipy/av in solve.sh, pytest/ctrf in tests/Dockerfile); the verifier logic is a pure deterministic computation with no live services."
     },
     "essential_difficulty": {
       "outcome": "pass",
-      "explanation": "The 1s edit-boundary and 2s UTC tolerances are generous relative to the reference solution's sub-second accuracy, so difficulty comes from the underlying signal-processing/matching problem rather than precision or formatting minutiae; the output JSON schema is simple."
+      "explanation": "Tolerances (1 s boundary, 2 s UTC) are generous relative to the reference solution's worst error (0.41 s) and are justified in the README from physical/log-resolution reasoning, so failures would stem from the forensic/signal-processing challenge, not formatting minutiae."
     },
     "test_instruction_alignment": {
       "outcome": "pass",
-      "explanation": "The three test functions check exactly what the instruction specifies: full coverage per recording, gapless/overlap-free tiling, and per-stretch boundary/UTC correctness (or correct null) — no extra or missing requirements."
+      "explanation": "The three checks in test_report.py (presence/coverage, edit-point tolerance, UTC tolerance) map exactly to the instruction's stated requirements; the '≥60 s stretch / ≥4 s cut' line in the instruction describes a guarantee about the evidence, not a separate testable output requirement, so there is no mismatch."
     },
     "novel": {
       "outcome": "pass",
-      "explanation": "While ENF analysis itself is known in forensic literature, this task's specific combination of interfering tones, variable clock drift, log outages, and out-of-range days is a custom synthetic scenario that can't be solved by recalling a memorized answer."
+      "explanation": "This is a custom, synthetically generated forensic scenario (rolling-shutter ENF video splice detection with camera-clock drift, dropped frames, and exposure-change confounders) that cannot be solved by recalling a textbook algorithm or memorized solution."
     },
     "agentic": {
       "outcome": "pass",
-      "explanation": "Solving requires writing and iterating on substantial DSP code, testing it against 8 real audio files and a large CSV log, and refining the approach based on results — not a one-shot generation task."
+      "explanation": "Solving this requires iterative exploration: decoding video, building signal-processing code, tuning against the grid log, and debugging edge cases (drift, exposure changes, out-of-order pieces) — not achievable in a single zero-shot generation."
     },
     "reviewable": {
       "outcome": "pass",
-      "explanation": "tests/case_plan.py derives the answer key programmatically from an explicit, documented data model (sessions, devices, splice points) rather than hardcoding values, and README.md explains the construction and verification in detail for non-specialist reviewers."
+      "explanation": "case_plan.py is the single source of truth from which both the synthetic evidence and the answer key are mechanically derived (not hardcoded), and the README's difficulty/solution/verification sections give a non-specialist enough grounding to audit consistency."
     },
     "instruction_concision": {
       "outcome": "pass",
-      "explanation": "instruction.md uses absolute paths throughout (/app/evidence/, /app/grid/frequency_log.csv, /app/report.json), does not mention any tools/libraries, and describes the end goal and output format without prescribing a solution method."
+      "explanation": "instruction.md uses absolute paths (/app/evidence/, /app/grid/frequency_log.csv, /app/report.json) throughout, is human-written and clear, and never hints at the ENF/rolling-shutter solution approach or prescribes any procedure."
     },
     "effective_instruction_length": {
       "outcome": "pass",
-      "explanation": "instruction.md is 255 words with no additional referenced requirement documents; it is concise and focused purely on the task's goal and output format."
+      "explanation": "instruction.md is 262 words with no referenced requirement documents (per the word-count helper) — concise and focused purely on the goal, inputs, and output schema, with no unnecessary repetition or fragmentation."
     },
     "solution_quality": {
       "outcome": "pass",
-      "explanation": "solve.sh installs pinned dependencies and invokes solution/enf_forensics.py (734 lines), a genuine signal-processing implementation that computes phase-coherent ENF matching rather than hardcoding any answer; the large script is appropriately kept as its own file rather than inlined."
+      "explanation": "solve.sh installs pinned dependencies and invokes solution/enf_forensics.py, a 923-line genuine signal-processing pipeline (scene subtraction, band-phase fitting, ENF demodulation, log cross-correlation) kept as its own file rather than inlined; I verified it actually computes the answer by running it end-to-end against the real evidence."
     },
     "separate_verifier_configured": {
       "outcome": "pass",
-      "explanation": "environment_mode is 'separate', the only verifier input (/app/report.json) is declared as an artifact, tests/Dockerfile bakes in pytest/pytest-json-ctrf with no runtime installs in test.sh, and there are no duplicated assets between environment/ and tests/ to drift."
+      "explanation": "environment_mode is 'separate', artifacts=['/app/report.json'] is declared at top level, tests/Dockerfile COPYs test code into /tests/ and bakes pytest/pytest-json-ctrf, and test.sh performs no runtime installs; there are no shared duplicated assets between environment/ and tests/ to drift."
     },
     "environment_hygiene": {
       "outcome": "pass",
-      "explanation": "environment/Dockerfile copies only the evidence/grid data and installs generic OS packages (no test or solution-only deps like numpy/scipy, pytest, or ctrf); tests/Dockerfile owns its own pytest/ctrf deps; apt is updated and cleaned with rm -rf /var/lib/apt/lists/* in both images with no apt version pins."
+      "explanation": "environment/Dockerfile only copies environment/data (evidence+grid) and installs ffmpeg/python/pip/venv for the agent to set up its own tooling; tests/Dockerfile owns pytest/pytest-json-ctrf; apt installs in both Dockerfiles are unpinned with update+cleanup as required."
     },
     "structured_data_schema": {
       "outcome": "pass",
-      "explanation": "instruction.md explicitly documents the exact JSON schema expected for /app/report.json: object keyed by filename, array of {start, end, utc} objects with defined semantics for each field."
+      "explanation": "instruction.md explicitly documents the exact JSON schema (object keyed by filename, each value a list of {start, end, utc} with units/format specified) as a normative requirement, not just an example."
     },
     "typos": {
       "outcome": "pass",
-      "explanation": "Cross-checked all file paths, commands, and identifiers referenced across instruction.md, Dockerfiles, solve.sh, and test files; all are consistent with no typos found."
+      "explanation": "I reviewed instruction.md, task.toml, both Dockerfiles, case_plan.py, test_report.py, synthesize_evidence.py, and solve.sh, and ran a targeted scan for common typos; no typos in filenames, paths, commands, or identifiers were found."
     },
     "difficulty_explanation_quality": {
       "outcome": "pass",
-      "explanation": "The README's Difficulty explanation describes concrete technical obstacles (weak hum SNR, interfering tones, clock drift, log gaps, out-of-range days) for both agents and humans, states the data is synthetic but realistic, and names the real-world role (forensic audio examiner) this task reflects."
+      "explanation": "README's Difficulty explanation concretely describes the agent/human challenge (sub-percent flicker bands, exposure-change confounders, log outage, undated sessions, clock drift), notes the data is synthetic but realistic, and identifies the real-world practitioner (forensic video examiner), without citing any pass rates."
     },
     "solution_explanation_quality": {
       "outcome": "pass",
-      "explanation": "The README's Solution explanation accurately describes the baseband harmonic extraction, cross-correlation dating, and phase-coherent model fitting approach, consistent with what I observed reading solution/enf_forensics.py (GridLog phase tracking, baseband function, etc.)."
+      "explanation": "README's Solution explanation accurately summarizes the actual pipeline in enf_forensics.py (scene-ratio row profiles, band-frequency fit, phase-coherent model growth, exposure-change discrimination) which I confirmed matches the code I inspected."
     },
     "verification_explanation_quality": {
       "outcome": "pass",
-      "explanation": "The README's Verification explanation accurately describes the three checks performed and justifies the 1s and 2s tolerances with concrete reference-solution error figures (0.01s edit accuracy, 0.91s worst UTC error) and physical reasoning (phase-step size, log timestamp ambiguity)."
+      "explanation": "README's Verification explanation describes exactly the three checks in test_report.py and explicitly justifies the 1 s/2 s tolerances against the reference solution's measured error margins and log timestamp resolution, satisfying the tolerance-calibration requirement."
     },
     "category_and_tags": {
       "outcome": "pass",
-      "explanation": "Category 'Security' / subcategory 'Forensics' fits the audio tamper-detection and forensic authentication scenario well, and tags (audio-forensics, electrical-network-frequency, signal-processing, tamper-detection, time-series-alignment, python) are specific and relevant."
+      "explanation": "Category 'Security' / subcategory 'Forensics' fits a video-tamper-detection task, and tags (video-forensics, electrical-network-frequency, rolling-shutter, signal-processing, tamper-detection, python) are specific and descriptive rather than generic."
     },
     "task_name": {
       "outcome": "pass",
-      "explanation": "'enf-splice-forensics' is a concise, 3-word kebab-case name that clearly conveys the task's domain (ENF analysis of spliced audio for forensics)."
+      "explanation": "'enf-splice-forensics' is a 3-word kebab-case slug that clearly conveys the task's domain (ENF analysis) and goal (splice forensics)."
     },
     "resource_configuration": {
       "outcome": "pass",
-      "explanation": "Verifier timeout (300s), agent timeout (14400s, matching the instruction's stated limit), and build timeout (900s) were deliberately adjusted from defaults; cpus (2) and memory (4096MB) are modest and appropriate for audio DSP on ~55MB of data, with difficulty coming from reasoning, not compute."
+      "explanation": "Agent timeout (14400 s / 4 h) matches the instruction text and the task's genuine difficulty; verifier timeout (300 s) is ample for a pure JSON-parsing check; cpus/memory were raised modestly above defaults (2 cpus, 4096 MB) to accommodate video decoding, with difficulty still coming from reasoning, not raw compute."
     },
     "task_readme": {
       "outcome": "pass",
-      "explanation": "README.md contains all required sections (Difficulty, Solution, Verification explanations, Relevant experience) plus a task metadata summary and reproducible regeneration instructions, with no unnecessary duplication."
+      "explanation": "README.md includes all required sections (Difficulty, Solution, Verification explanations, Relevant experience) plus a metadata summary and useful regeneration instructions, without redundant duplication of instruction or solution code."
     },
     "expert_time_estimate": {
       "outcome": "pass",
-      "explanation": "The 6-hour estimate is non-default and plausible given the described difficulty of building a working ENF phase-matching pipeline from scratch, even though the resulting reference solution runs quickly."
+      "explanation": "expert_time_estimate_hours = 8 is non-zero and plausible given the task's described complexity (custom signal-processing pipeline, multiple confounders to reason through) and the 4-hour agent timeout set well below it to allow margin."
     },
     "task_toml_schema": {
       "outcome": "pass",
-      "explanation": "task.toml contains only recognized fields across [task], [metadata], [verifier], [agent], [environment], and root-level artifacts — no invented fields were found."
+      "explanation": "task.toml contains only recognized fields in [metadata], [verifier], [agent], [environment], and [solution.env], plus the valid root-level schema_version/artifacts/task fields; no invented fields were found."
     },
     "no_extraneous_files": {
       "outcome": "pass",
-      "explanation": "The task directory contains only the required scaffold files (Dockerfiles, instruction.md, README.md, solution, tests) plus the evidence/grid data that the Dockerfile and tests directly consume; no stray or leftover files were found."
+      "explanation": "Every file in the task directory is required: Dockerfiles, instruction/README/task.toml, the evidence/grid data referenced by the instruction, and the solution/test scripts that use them; no cruft or leftovers were found."
     },
     "artifact_efficiency": {
-      "outcome": "not_applicable",
-      "explanation": "The only artifact is /app/report.json, a small agent-produced JSON deliverable (the answer itself) with no build-time-fixed data or large dependency tree being shipped, so the baked-baseline/diff guidance does not apply."
+      "outcome": "pass",
+      "explanation": "The only artifact is /app/report.json, a small agent-produced JSON deliverable with no build-time-fixed data or large trees shipped unnecessarily, and no [[verifier.collect]] hooks are used."
     },
     "verifier_execution_isolation": {
       "outcome": "not_applicable",
-      "explanation": "The verifier never executes or imports agent-produced code; test_report.py only parses and validates the JSON file the agent wrote."
+      "explanation": "The verifier never executes or imports agent-produced code; test_report.py only parses the JSON file the agent wrote."
     },
     "ctrf_reporting": {
       "outcome": "pass",
-      "explanation": "test.sh runs pytest with --ctrf /logs/verifier/ctrf.json against test_report.py, producing a per-test CTRF report as required for a pytest-based verifier."
+      "explanation": "test.sh runs pytest with --ctrf /logs/verifier/ctrf.json against test_report.py, emitting per-test CTRF results for its 10 discrete checks as required."
     },
     "do_not_modify_enforced": {
       "outcome": "not_applicable",
-      "explanation": "instruction.md contains no instruction to avoid modifying, deleting, or preserving any concrete artifact."
+      "explanation": "instruction.md contains no 'do not modify / must remain unchanged' constraint on any concrete artifact for the verifier to enforce."
     },
     "binary_reward": {
       "outcome": "pass",
-      "explanation": "test.sh writes exactly 1 or 0 to /logs/verifier/reward.txt based solely on the pytest exit code, with no intermediate or fractional values on any path."
+      "explanation": "test.sh writes exactly 1 if the pytest exit code is 0 and exactly 0 otherwise — no fractional or partial-credit path exists."
     }
   }
 }

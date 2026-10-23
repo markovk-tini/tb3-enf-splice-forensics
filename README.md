@@ -31,7 +31,7 @@ GPT-6.1-sol in 3 of 3 trials; see
 | Check (TB3 CI) | Result | Details |
 |---|---|---|
 | Static checks (28) | ✅ 28/28 pass | [`results/static-checks.md`](results/static-checks.md) |
-| Implementation rubric review (36 criteria, claude-code + claude-sonnet-5) | _re-running on the video version_ | [`results/rubric-review.md`](results/rubric-review.md) |
+| Implementation rubric review (36 criteria, claude-code + claude-sonnet-5) | ✅ 34 pass, 2 n/a, 0 fail | [`results/rubric-review.md`](results/rubric-review.md) |
 | Docker build | ✅ | [`results/validation.md`](results/validation.md) |
 | Oracle validation | ✅ reward 1.0 (10/10 tests) | [`results/validation.md`](results/validation.md) |
 | Nop validation | ✅ reward 0.0 (0/10 tests) | [`results/validation.md`](results/validation.md) |
