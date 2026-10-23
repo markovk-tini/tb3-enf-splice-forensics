@@ -685,6 +685,7 @@ LOCAL_COH = 0.9      # a continuation must be this coherent, relative to its nei
 TIE_COH = 0.98       # phase fit that settles a tie between days ...
 TIE_LEAD = 0.15      # ... and its lead over the runner-up
 LOCK_COH = 0.97      # phase locking that dates footage against another video (true 0.997, chance <= 0.94)
+LOCK_COH_FREE = 0.99  # the same when the relative clock rate has to be fitted too
 
 
 def phase_change(model, t, span=4.0, gap=1.0):
@@ -1100,7 +1101,7 @@ def examine(path, log):
     return best
 
 
-def locked_offset(ha, a, b, hb, a2, b2, k):
+def locked_offset(ha, a, b, hb, a2, b2, k, rho0=None):
     """Where in the other video's dated stretch [a2, b2] the footage [a, b]
     was recorded, if anywhere: the offset d such that file time t here was
     recorded with file time t + d there, and the phase coherence there.
@@ -1134,18 +1135,26 @@ def locked_offset(ha, a, b, hb, a2, b2, k):
         y = za * np.conj(zb) * np.exp(-2j * np.pi * NOM * k * (tp - tt))
         return abs(y.sum()) / (np.abs(y).sum() + 1e-30)
 
+    # rho0: the relative rate implied by the two videos' clocks where both are
+    # known from the log. Fitting it freely as well (+-100 ppm) can absorb the
+    # linear phase drift between two unrelated recordings, so a lock found
+    # that way has to be stronger.
+    if rho0 is None:
+        coarse, fine, need = 1.0 + np.arange(-100e-6, 100.1e-6, 4e-6), 4e-6, LOCK_COH_FREE
+    else:
+        coarse, fine, need = rho0 + np.arange(-3e-6, 3.01e-6, 1e-6), 1e-6, LOCK_COH
     best = (0.0, d0, 1.0)
-    for rho in 1.0 + np.arange(-100e-6, 100.1e-6, 4e-6):
+    for rho in coarse:
         for d in d0 + np.arange(-1.5, 1.5001, 0.05):
             c_ = coherence(d, rho)
             if c_ > best[0]:
                 best = (c_, d, rho)
-    for rho in best[2] + np.arange(-4e-6, 4.01e-6, 0.5e-6):
+    for rho in best[2] + np.arange(-fine, fine * 1.001, fine / 8):
         for d in best[1] + np.arange(-0.06, 0.0601, 0.005):
             c_ = coherence(d, rho)
             if c_ > best[0]:
                 best = (c_, d, rho)
-    return (best[1], best[0]) if best[0] >= LOCK_COH else None
+    return (best[1], best[0]) if best[0] >= need else None
 
 
 def cross_date(results):
@@ -1154,6 +1163,9 @@ def cross_date(results):
     other videos' dated footage; footage of the same moments is
     phase-locked to it, and dates it."""
     for name, r in results.items():
+        # this video's clock against the log, from its own dated stretches
+        own = [m.r for _, _, m in r["final"] if isinstance(m, Model)]
+        r_host = float(np.median(own)) if own else None
         for st in r["final"]:
             a, b, m = st
             if m is not None or b - a < 60:
@@ -1164,9 +1176,10 @@ def cross_date(results):
                 if other == name or not common:
                     continue
                 for a2, b2, m2 in q["final"]:
-                    if m2 is None:
+                    if not isinstance(m2, Model):
                         continue
-                    hit = locked_offset(r["hum"], a, b, q["hum"], a2, b2, common[0])
+                    rho0 = r_host / m2.r if r_host is not None else None
+                    hit = locked_offset(r["hum"], a, b, q["hum"], a2, b2, common[0], rho0)
                     if hit is not None and (found is None or hit[1] > found[1]):
                         found = (hit[0], hit[1], m2)
             if found is not None:

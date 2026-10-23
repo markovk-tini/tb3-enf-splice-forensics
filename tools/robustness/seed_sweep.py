@@ -141,14 +141,14 @@ def run(seed, workers=int(os.environ.get("SWEEP_WORKERS", "8"))):
         plan.SESSIONS.clear(); plan.SESSIONS.update(saved[0])
         plan.EXHIBITS.clear(); plan.EXHIBITS.update(saved[1])
     ok = sum(1 for v in results.values() if not v)
-    print(f"seed {seed}: {ok}/8 exhibits correct ({time.time() - t0:.0f}s)", flush=True)
+    print(f"seed {seed}: {ok}/{len(results)} exhibits correct ({time.time() - t0:.0f}s)", flush=True)
     for name, v in results.items():
         if v:
             print(f"   {name}: {v}", flush=True)
-    return ok
+    return ok, len(results)
 
 
 if __name__ == "__main__":
     seeds = [int(s) for s in sys.argv[1:]] or [1, 2, 3, 4, 5, 6]
-    total = sum(run(s) for s in seeds)
-    print(f"TOTAL {total}/{8 * len(seeds)}")
+    counts = [run(s) for s in seeds]
+    print(f"TOTAL {sum(c[0] for c in counts)}/{sum(c[1] for c in counts)}")
