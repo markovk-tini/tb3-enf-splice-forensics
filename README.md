@@ -30,7 +30,7 @@ solved by both agents in about half an hour. See
 | Task | [`tasks/enf-splice-forensics/`](tasks/enf-splice-forensics/) ([instruction](tasks/enf-splice-forensics/instruction.md), [README](tasks/enf-splice-forensics/README.md)) |
 | Category | Security / Forensics |
 | Agent timeout | 4 h, 2 CPUs, 4 GB |
-| Verifier | separate container, parses `/app/report.json`, 10 pytest tests (CTRF), binary reward |
+| Verifier | separate container, parses `/app/report.json`, 13 pytest tests (CTRF), binary reward |
 
 ## Results
 
