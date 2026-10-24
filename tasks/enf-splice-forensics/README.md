@@ -40,7 +40,7 @@ The tolerances cover honest measurement error. The log has one reading per secon
 
 ## Relevant experience
 
-I built Touchless, a Windows app controlled by hand gestures and voice through a live webcam pipeline (OpenCV, MediaPipe), so exposure under indoor lighting, dropped frames, frame timestamps and keeping audio in sync with video in its ffmpeg clip recorder are everyday problems for me.
+I built Touchless, a Windows app controlled by hand gestures and voice through a live webcam pipeline (OpenCV, MediaPipe). Making it work on ordinary webcams meant tuning exposure against frame rate under indoor lighting, handling dropped frames and timestamps, and keeping audio in sync with video in its ffmpeg clip recorder.
 
 ## Regenerating the evidence
 
