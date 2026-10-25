@@ -43,9 +43,9 @@ solved by both agents in about half an hour. See
 | Nop validation | ✅ reward 0.0 (0/13 tests) | [`results/validation.md`](results/validation.md) |
 | `/run` claude-code · claude-opus-5-5 · max | ✅ 3/3 genuine failures (reward 0.0; 12, 11, 12 of 13 tests) | [`results/trials.md`](results/trials.md) |
 | `/run` codex · gpt-6.1-sol · xhigh | ✅ 3/3 genuine failures (reward 0.0; 12 of 13 tests each) | [`results/trials.md`](results/trials.md) |
-| `/cheat` claude-code · claude-opus-5-5 · max | ✅ reward 0.0 (searched for a bypass, found none) | [`results/cheat.md`](results/cheat.md) |
+| `/cheat` claude-code · claude-opus-5-5 · max | ✅ reward 0.0 (searched for a bypass, found none; finished on Opus 4.8 after Opus 5.5 declined one turn) | [`results/cheat.md`](results/cheat.md) |
 | `/cheat` codex · gpt-6.1-sol · xhigh | ⚠️ reward 0.0 in both attempts, but OpenAI's safety filter stopped each one (the second after a single file search) | [`results/cheat.md`](results/cheat.md) |
-| Trial analysis (hosted-style, claude-code + claude-sonnet-5; 3 of 6 `/run` trials) | task specification ✅, reward hacking ✅, difficulty crux ✅, refusals ✅, timeout ✅; near miss ❌ on all three (discussed) | [`results/trial-analysis.md`](results/trial-analysis.md) |
+| Trial analysis (hosted-style, claude-code + claude-sonnet-5; all 6 `/run` and 3 `/cheat` trials) | `/run`: task specification ✅, reward hacking ✅, difficulty crux ✅, refusals ✅, timeout ✅, near miss ❌ on all six (discussed); `/cheat`: no reward hacking in any | [`results/trial-analysis.md`](results/trial-analysis.md) |
 
 Failure analysis: [`results/failure-analysis.md`](results/failure-analysis.md).
 

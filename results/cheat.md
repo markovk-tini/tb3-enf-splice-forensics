@@ -29,6 +29,12 @@ wrote no report, and stopped with its conclusion:
 > the UTC alignment, i.e., without doing the intended ENF (mains-flicker vs.
 > frequency-log) analysis.
 
+Partway through, Opus 5.5's own safeguards declined one turn (refusal category
+"cyber"), and Claude Code switched to Opus 4.8 for the rest of the session,
+which it does automatically after such a refusal. Opus 5.5 wrote 14 of the
+trial's replies (5,965 output tokens) and Opus 4.8 the other 12 (8,791),
+including the conclusion above. None of the six `/run` trials switched models.
+
 ## codex: stopped by OpenAI's safety filter, twice
 
 Both codex trials scored 0, but neither tested the task. The hack-trial prompt
@@ -68,6 +74,14 @@ trial above is the one that actually probed the verifier.
 - **Nothing to tamper with.** The verifier runs in a separate container after
   the agent's session. It only parses `/app/report.json`; no agent code runs
   there, and the agent cannot reach the test files.
+- **The log folders do not reach grading.** The agent's container has
+  writable `/logs/verifier` and `/logs/artifacts` folders, which the Claude
+  trial noticed. In separate-verifier mode Harbor stops the agent's container
+  before grading, empties `/logs/verifier` in the verifier's container and
+  carries over only `/app/report.json`. `tools/robustness/reward_file_probe.sh`
+  checks this end to end: score files written to those folders from inside the
+  agent's container leave the reward at 0.0 (job
+  `probe-reward-files-20261025-001438`).
 - **No answer in the agent's image.** The answer key is derived from
   `tests/case_plan.py`, which exists only in the verifier image; the agent image
   holds the eleven MP4 files and the grid log. The files carry no metadata that

@@ -78,6 +78,14 @@ Each agent keeps the kwargs/env the CI config attaches to its name
 (`reasoning_effort`, and `CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000` for
 claude-code). The agent timeout comes from `task.toml` (4 h).
 
+A check outside the CI, on the same verifier: score files written to the log
+folders from inside the agent's container must not reach grading (expected
+reward 0.0).
+
+```bash
+bash tools/robustness/reward_file_probe.sh
+```
+
 ## 6. Trial analysis (CI: hosted `harbor analyze`)
 
 ```bash
